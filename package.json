@@ -1,11 +1,14 @@
 {
-  "name": "react-example",
+  "name": "freestyle-barber-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://afelipetafur.github.io/freestyle-barber-app",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
@@ -18,6 +21,7 @@
     "date-fns": "^4.2.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "gh-pages": "^6.3.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.39.0",
     "react": "^19.0.1",
