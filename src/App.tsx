@@ -21,7 +21,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Check for public booking route
-  const isBookingPage = window.location.pathname === '/reservar' || window.location.pathname === '/book';
+  const isBookingPage = window.location.pathname.endsWith('/reservar') || window.location.pathname.endsWith('/book');
 
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +67,7 @@ export default function App() {
       case 'usuarios': return <Users data={data} onRefresh={loadData} />;
       case 'reportes': return <Reports data={data} user={user} />;
       case 'config': return <Settings data={data} onRefresh={loadData} />;
-      default: return <Dashboard data={data} user={user} />;
+      default: return <Dashboard data={data} user={user} onTabChange={setActiveTab} />;
     }
   };
 

@@ -9,24 +9,12 @@ import {
   Receipt,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  ChevronLeft
 } from 'lucide-react';
 import { AppData, SaleItem, Service, Product, User } from '../types';
 import { formatCurrency, cn } from '../utils';
 import { api } from '../api';
-import { 
-  Plus, 
-  Trash2, 
-  ShoppingBag, 
-  Scissors, 
-  Search, 
-  Minus, 
-  Receipt,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  ChevronLeft
-} from 'lucide-react';
 
 export default function Sales({ data, onRefresh, user, onBack }: { data: AppData, onRefresh: () => void, user: User, onBack?: () => void }) {
   const [cart, setCart] = useState<SaleItem[]>([]);
