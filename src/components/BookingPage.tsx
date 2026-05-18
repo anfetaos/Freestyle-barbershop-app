@@ -6,6 +6,7 @@ import {
   Calendar, 
   Clock, 
   User as UserIcon, 
+  Users as UsersIcon,
   Scissors, 
   CheckCircle2, 
   Loader2,
@@ -23,7 +24,7 @@ export default function BookingPage() {
 
   // Selection state
   const [service, setService] = useState<Service | null>(null);
-  const [barber, setBarber] = useState<string>(''); // barber usuario
+  const [barber, setBarber] = useState<string>('Cualquier barbero'); // barber nombre
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState<string>('');
   const [customer, setCustomer] = useState({ nombre: '', telefono: '' });
@@ -67,12 +68,13 @@ export default function BookingPage() {
         telefono: customer.telefono,
         servicio_id: service.id,
         servicio: service.nombre,
-        barbero: barber || 'Cualquier barbero',
+        barbero: barber,
         estado: 'pendiente'
       });
       setSuccess(true);
     } catch (err) {
       console.error(err);
+      alert('Error al agendar la cita. Por favor intenta de nuevo.');
     } finally {
       setSubmitting(false);
     }
@@ -194,24 +196,28 @@ export default function BookingPage() {
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                         <button
-                            onClick={() => setBarber('')}
+                            onClick={() => setBarber('Cualquier barbero')}
                             className={cn(
-                                "p-4 rounded-xl border text-sm font-bold uppercase transition-all",
-                                barber === '' ? "bg-brand-blue text-bg border-brand-blue shadow-neon" : "bg-d1 border-white/5 text-muted hover:border-brand-blue/30"
+                                "p-4 rounded-xl border text-sm font-bold uppercase transition-all flex flex-col items-center gap-2",
+                                barber === 'Cualquier barbero' ? "bg-brand-blue text-bg border-brand-blue shadow-neon" : "bg-d1 border-white/5 text-muted hover:border-brand-blue/30"
                             )}
                         >
-                            Cualquiera
+                            <UsersIcon size={18} />
+                            <span>Cualquiera</span>
                         </button>
                         {barbers.map(b => (
                             <button
                                 key={b.id}
-                                onClick={() => setBarber(b.usuario)}
+                                onClick={() => setBarber(b.nombre)}
                                 className={cn(
-                                    "p-4 rounded-xl border text-sm font-bold uppercase transition-all",
-                                    barber === b.usuario ? "bg-brand-blue text-bg border-brand-blue shadow-neon" : "bg-d1 border-white/5 text-muted hover:border-brand-blue/30"
+                                    "p-4 rounded-xl border text-sm font-bold uppercase transition-all flex flex-col items-center gap-2",
+                                    barber === b.nombre ? "bg-brand-blue text-bg border-brand-blue shadow-neon" : "bg-d1 border-white/5 text-muted hover:border-brand-blue/30"
                                 )}
                             >
-                                {b.nombre}
+                                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs">
+                                    {b.nombre.charAt(0)}
+                                </div>
+                                <span className="truncate w-full">{b.nombre}</span>
                             </button>
                         ))}
                     </div>

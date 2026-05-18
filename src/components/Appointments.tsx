@@ -81,6 +81,13 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
             />
           </div>
           <div className="flex items-center gap-1">
+             <button 
+                onClick={onRefresh}
+                className="p-2 hover:bg-white/5 rounded-lg text-muted"
+                title="Actualizar datos"
+             >
+                <History size={20}/>
+             </button>
              <button className="p-2 hover:bg-white/5 rounded-lg text-muted"><ChevronLeft size={20}/></button>
              <button className="p-2 hover:bg-white/5 rounded-lg text-muted"><ChevronRight size={20}/></button>
           </div>
@@ -224,6 +231,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                 <div>
                   <label className="block text-xs uppercase font-bold text-muted mb-2">Barbero</label>
                   <select required value={newCita.barbero} onChange={e => setNewCita({...newCita, barbero: e.target.value})} className="w-full bg-bg border border-white/10 rounded-lg px-4 py-2.5 text-txt text-sm outline-none focus:border-brand-blue appearance-none">
+                     <option value="Cualquier barbero">Cualquier barbero</option>
                      {data.usuarios.filter(u => u.role === 'barber').map(u => (
                        <option key={u.usuario} value={u.nombre}>{u.nombre}</option>
                      ))}

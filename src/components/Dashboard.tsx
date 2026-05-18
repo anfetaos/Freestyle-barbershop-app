@@ -43,7 +43,9 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
   const userSales = (isOwner ? data.ventas : data.ventas.filter(v => v.usuario === user.usuario))
     .filter(v => filterByPeriod(v.fecha));
   
-  const userAppointments = isOwner ? data.citas : data.citas.filter(c => c.barbero === user.nombre || c.barbero === user.usuario);
+  const userAppointments = isOwner 
+    ? data.citas 
+    : data.citas.filter(c => c.barbero === user.nombre || c.barbero === user.usuario || c.barbero === 'Cualquier barbero');
   const filteredAppointments = userAppointments.filter(c => filterByPeriod(c.fecha));
 
   // Stats calculation
