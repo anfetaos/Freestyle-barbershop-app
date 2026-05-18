@@ -1,9 +1,9 @@
 {
-  "name": "freestyle-barber-app",
+  "name": "freestyle-barber-v2",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://afelipetafur.github.io/freestyle-barber-app",
+  "homepage": ".",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
