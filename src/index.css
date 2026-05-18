@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #050816;
+  --color-d1: #0c1026;
+  --color-d2: #111831;
+  --color-d3: #182347;
+  --color-brand-blue: #3ea6ff;
+  --color-brand-blue2: #66c3ff;
+  --color-brand-gold: #d6b06a;
+  --color-txt: #f5f7ff;
+  --color-muted: #8d9ab8;
+  --color-success: #1dd65f;
+  --color-danger: #ff4e4e;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --shadow-lg: 0 0 15px rgba(62, 166, 255, 0.2);
+  --shadow-neon: 0 0 15px rgba(62, 166, 255, 0.3);
+}
+
+@layer base {
+  body {
+    @apply bg-bg text-txt font-sans;
+  }
+
+  /* Glassmorphism utility */
+  .glass {
+    @apply bg-bg/80 backdrop-blur-xl border border-d3;
+  }
+  
+  .glass-card {
+    @apply bg-d1/50 backdrop-blur-sm border border-d3 rounded-xl;
+  }
+
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-bg;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-d3 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-brand-blue;
+  }
+}
+
+.neon-text {
+  text-shadow: 0 0 10px rgba(62, 166, 255, 0.5), 0 0 20px rgba(62, 166, 255, 0.3);
+}
+
+.neon-border {
+  box-shadow: var(--shadow-neon);
+}
+
+.btn-primary {
+  @apply bg-brand-blue hover:bg-brand-blue2 text-bg px-5 py-2 rounded-md text-xs font-bold uppercase transition-colors shadow-neon;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}

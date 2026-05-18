@@ -1,0 +1,8 @@
+{
+  "name": "Freestyle Barbershop",
+  "description": "Professional administrative system for modern barbershops. Features sales control, inventory, appointments, and commissions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
