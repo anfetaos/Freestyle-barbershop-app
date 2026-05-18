@@ -21,7 +21,11 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   // Check for public booking route
-  const isBookingPage = window.location.pathname.endsWith('/reservar') || window.location.pathname.endsWith('/book');
+  const isBookingPage = 
+    window.location.pathname.endsWith('/reservar') || 
+    window.location.pathname.endsWith('/book') ||
+    window.location.hash.includes('reservar') ||
+    window.location.hash.includes('book');
 
   const [error, setError] = useState<string | null>(null);
 

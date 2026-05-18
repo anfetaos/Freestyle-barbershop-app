@@ -43,7 +43,7 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
     }
   };
 
-  const bookingUrl = `${window.location.origin}/reservar`;
+  const bookingUrl = window.location.href.split('#')[0].split('?')[0] + '#/reservar';
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(bookingUrl);
