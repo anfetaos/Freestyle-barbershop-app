@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { AppData, Service, User } from '../types';
+import { AppData, Service, User, Appointment } from '../types';
 import { formatCurrency, cn } from '../utils';
 import { 
   Calendar, 
@@ -29,6 +29,37 @@ export default function BookingPage() {
   const [time, setTime] = useState<string>('');
   const [customer, setCustomer] = useState({ nombre: '', telefono: '' });
   const [submitting, setSubmitting] = useState(false);
+
+  const [view, setView] = useState<'booking' | 'my-bookings'>('booking');
+  const [searchPhone, setSearchPhone] = useState('');
+  const [myCitas, setMyCitas] = useState<Appointment[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchPhone) return;
+    setSearching(true);
+    try {
+      const res = await api.loadAllData();
+      const filtered = res.citas.filter(c => c.telefono === searchPhone && c.estado !== 'cancelada');
+      setMyCitas(filtered);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleCancelByClient = async (id: string) => {
+    if (!confirm('¿Estás seguro que deseas cancelar tu cita?')) return;
+    try {
+      await api.editAppointment(id, { estado: 'cancelada' });
+      alert('Cita cancelada correctamente');
+      handleSearch();
+    } catch (err) {
+      console.error(err);
+      alert('Error al cancelar la cita');
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,6 +93,7 @@ export default function BookingPage() {
     setSubmitting(true);
     try {
       await api.saveAppointment({
+        id: `cita_${Date.now()}`,
         fecha: date,
         hora: time,
         cliente: customer.nombre,
@@ -120,16 +152,88 @@ export default function BookingPage() {
     <div className="min-h-screen bg-bg text-txt font-sans selection:bg-brand-blue/30">
       <div className="max-w-2xl mx-auto px-6 py-12">
         {/* Header */}
-        <header className="mb-12 text-center">
+        <header className="mb-12 text-center relative">
+          <div className="absolute right-0 top-0">
+             <button 
+                onClick={() => setView(view === 'booking' ? 'my-bookings' : 'booking')}
+                className="text-[10px] font-bold uppercase tracking-widest text-brand-blue border border-brand-blue/30 px-3 py-1.5 rounded-lg hover:bg-brand-blue hover:text-bg transition-all"
+             >
+                {view === 'booking' ? 'Mis Reservas' : 'Nueva Reserva'}
+             </button>
+          </div>
           <div className="w-16 h-16 bg-gradient-to-tr from-brand-blue to-brand-gold rounded-2xl mx-auto mb-6 flex items-center justify-center text-3xl font-bold text-bg shadow-neon rotate-3 hover:rotate-0 transition-transform cursor-default">
             F
           </div>
-          <h1 className="text-3xl font-black tracking-tighter uppercase leading-none mb-1">Reserva Tu Estilo</h1>
+          <h1 className="text-3xl font-black tracking-tighter uppercase leading-none mb-1">
+            {view === 'booking' ? 'Reserva Tu Estilo' : 'Mis Citas'}
+          </h1>
           <p className="text-brand-gold text-[10px] font-bold uppercase tracking-[0.3em]">Freestyle Urban Grooming</p>
         </header>
 
-        {/* Progress */}
-        <div className="flex justify-between items-center mb-12 relative px-4">
+        {view === 'my-bookings' ? (
+          <div className="space-y-8">
+             <div className="glass-card p-6 border-white/5">
+                <label className="text-[10px] font-bold text-muted uppercase tracking-widest block mb-4">Ingresa tu número de teléfono</label>
+                <div className="flex gap-2">
+                   <input 
+                      type="tel" 
+                      placeholder="Ej. 300 000 0000"
+                      className="flex-1 bg-d1 border border-white/5 rounded-xl p-4 text-txt outline-none focus:border-brand-blue/50 transition-all font-mono"
+                      value={searchPhone}
+                      onChange={(e) => setSearchPhone(e.target.value)}
+                   />
+                   <button 
+                      onClick={handleSearch}
+                      disabled={searching}
+                      className="bg-brand-blue text-bg px-6 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-brand-blue2 transition-all flex items-center justify-center"
+                   >
+                      {searching ? <Loader2 size={20} className="animate-spin" /> : 'Buscar'}
+                   </button>
+                </div>
+             </div>
+
+             <div className="space-y-4">
+                {myCitas.map(c => (
+                   <div key={c.id} className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:border-white/20">
+                      <div>
+                         <p className="text-xs text-brand-gold font-bold uppercase tracking-widest mb-1">{c.servicio}</p>
+                         <p className="text-sm font-bold text-txt">{new Date(c.fecha).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+                         <div className="flex items-center gap-4 mt-1 text-[10px] text-muted font-bold uppercase">
+                            <span className="flex items-center gap-1"><Clock size={12}/> {c.hora}</span>
+                            <span className="flex items-center gap-1"><UserIcon size={12}/> {c.barbero}</span>
+                         </div>
+                      </div>
+                      <div className="flex items-center gap-4 w-full sm:w-auto">
+                         <span className={cn(
+                            "px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest",
+                            c.estado === 'pendiente' ? "bg-brand-gold/20 text-brand-gold" :
+                            c.estado === 'confirmada' ? "bg-brand-blue/20 text-brand-blue" :
+                            "bg-success/20 text-success"
+                         )}>
+                            {c.estado}
+                         </span>
+                         {(c.estado === 'pendiente' || c.estado === 'confirmada') && (
+                            <button 
+                               onClick={() => handleCancelByClient(c.id!)}
+                               className="text-[10px] font-bold text-danger uppercase hover:underline"
+                            >
+                               Cancelar
+                            </button>
+                         )}
+                      </div>
+                   </div>
+                ))}
+                {myCitas.length === 0 && searchPhone && !searching && (
+                   <div className="text-center py-12 text-muted uppercase text-[10px] font-bold tracking-widest italic opacity-50">
+                      No se encontraron citas activas para este número
+                   </div>
+                )}
+             </div>
+          </div>
+        ) : (
+          <>
+            {/* Progress */}
+            <div className="flex justify-between items-center mb-12 relative px-4">
           <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-d3 -translate-y-1/2 z-0" />
           {[1, 2, 3].map((s) => (
             <div 
@@ -336,6 +440,8 @@ export default function BookingPage() {
             )}
           </AnimatePresence>
         </div>
+      </>
+    )}
       </div>
     </div>
   );

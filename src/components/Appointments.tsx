@@ -35,6 +35,13 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     estado: 'pendiente'
   });
 
+  // Keep newCita fecha in sync when selectedDate changes and modal is closed
+  React.useEffect(() => {
+    if (!isModalOpen) {
+      setNewCita(prev => ({ ...prev, fecha: selectedDate }));
+    }
+  }, [selectedDate, isModalOpen]);
+
   const filteredAppointments = data.citas
     .filter(c => c.fecha === selectedDate)
     .sort((a, b) => a.hora.localeCompare(b.hora));
@@ -57,6 +64,36 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     }
   };
 
+  const handleFinalize = async (cita: Appointment) => {
+    setLoading(true);
+    try {
+      // 1. Mark as finalized
+      await api.editAppointment(cita.id!, { estado: 'finalizada' });
+      
+      // 2. Create a sale with items array as expected by GAS
+      const service = data.servicios.find(s => s.id === cita.servicio_id);
+      await api.saveSale({
+        fecha: new Date().toISOString().split('T')[0],
+        usuario: data.usuarios.find(u => u.nombre === cita.barbero)?.usuario || user.usuario,
+        items: [{
+          id: cita.servicio_id,
+          nombre: cita.servicio,
+          tipo: 'servicio',
+          valor: service?.precio || 0,
+          cantidad: 1,
+          comisionable: true
+        }]
+      });
+      
+      onRefresh();
+    } catch (err) {
+      console.error(err);
+      alert('Error al cobrar el servicio');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateStatus = async (id: string, status: Appointment['estado']) => {
     try {
       await api.editAppointment(id, { estado: status });
@@ -64,6 +101,12 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleDateChange = (days: number) => {
+    const current = new Date(selectedDate + 'T00:00:00');
+    current.setDate(current.getDate() + days);
+    setSelectedDate(current.toISOString().split('T')[0]);
   };
 
   return (
@@ -88,8 +131,20 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
              >
                 <History size={20}/>
              </button>
-             <button className="p-2 hover:bg-white/5 rounded-lg text-muted"><ChevronLeft size={20}/></button>
-             <button className="p-2 hover:bg-white/5 rounded-lg text-muted"><ChevronRight size={20}/></button>
+             <button 
+                onClick={() => handleDateChange(-1)}
+                className="p-2 hover:bg-white/5 rounded-lg text-muted"
+                title="Día anterior"
+             >
+                <ChevronLeft size={20}/>
+             </button>
+             <button 
+                onClick={() => handleDateChange(1)}
+                className="p-2 hover:bg-white/5 rounded-lg text-muted"
+                title="Siguiente día"
+             >
+                <ChevronRight size={20}/>
+             </button>
           </div>
         </div>
         <button 
@@ -157,10 +212,12 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                      )}
                      {cita.estado === 'confirmada' && (
                        <button 
-                        onClick={() => updateStatus(cita.id!, 'finalizada')}
-                        className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all"
+                        onClick={() => handleFinalize(cita)}
+                        className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all flex items-center gap-1 px-3"
+                        title="Cobrar servicio"
                        >
                          <Check size={16} />
+                         <span className="text-[10px] font-bold">COBRAR</span>
                        </button>
                      )}
                      {(cita.estado === 'pendiente' || cita.estado === 'confirmada') && (

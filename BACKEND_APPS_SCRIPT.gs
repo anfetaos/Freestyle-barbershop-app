@@ -77,7 +77,7 @@ function getSheet(name) {
     else if (name == "servicios") sheet.appendRow(['id','nombre','categoria','precio','duracion','activo']);
     else if (name == "productos") sheet.appendRow(['id','nombre','categoria','costo','venta','stock','activo']);
     else if (name == "ventas") sheet.appendRow(['fecha','tipo','item_id','item_nombre','valor','cantidad','usuario', 'comisionable']);
-    else if (name == "citas") sheet.appendRow(['id','fecha','hora','cliente','telefono','servicio_id','servicio','barbero','estado']);
+    else if (name == "citas") sheet.appendRow(['fecha','hora','cliente','telefono','servicio_id','servicio','estado','barbero','id']);
     else if (name == "gastos") sheet.appendRow(['fecha','categoria','descripcion','monto','usuario']);
     else if (name == "config") {
       sheet.appendRow(['key','value','tipo']);
@@ -197,15 +197,15 @@ function updateStock(id, qty) {
 function saveAppointment(apt) {
   var sheet = getSheet("citas");
   sheet.appendRow([
-    Utilities.getUuid(),
     apt.fecha,
     apt.hora,
     apt.cliente,
     apt.telefono,
     apt.servicio_id,
     apt.servicio,
+    apt.estado,
     apt.barbero,
-    apt.estado
+    apt.id || Utilities.getUuid()
   ]);
   return true;
 }
@@ -213,11 +213,14 @@ function saveAppointment(apt) {
 function editAppointment(id, apt) {
   var sheet = getSheet("citas");
   var data = sheet.getDataRange().getValues();
-  var headers = data[0];
+  var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  var idCol = headers.indexOf('id');
+  if (idCol === -1) idCol = 0; // Fallback to first column
+  
   for (var i = 1; i < data.length; i++) {
-    if (data[i][0] == id) {
+    if (data[i][idCol] == id) {
       for (var key in apt) {
-        var col = headers.indexOf(key);
+        var col = headers.indexOf(key.toLowerCase());
         if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
       }
       return true;

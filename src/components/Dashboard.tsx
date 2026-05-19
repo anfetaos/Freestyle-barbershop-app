@@ -294,7 +294,7 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
                     <td className="px-6 py-4 font-mono text-brand-blue font-semibold">{cita.servicio}</td>
                     <td className="px-6 py-4 text-muted font-medium">{cita.barbero}</td>
                     <td className="px-6 py-4 font-bold text-txt font-mono">{cita.hora}</td>
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-6 py-4 text-right flex flex-col items-end gap-1">
                       <span className={cn(
                         "px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest",
                         cita.estado === 'confirmada' ? "bg-brand-blue/20 text-brand-blue" :
@@ -304,6 +304,14 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
                       )}>
                         {cita.estado}
                       </span>
+                      {cita.estado === 'confirmada' && (
+                        <button 
+                          onClick={() => onTabChange('citas')}
+                          className="text-[8px] font-bold text-brand-blue uppercase hover:underline"
+                        >
+                          Ir a cobrar
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
