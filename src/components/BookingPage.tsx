@@ -78,7 +78,7 @@ export default function BookingPage() {
   const nextStep = () => setStep(step + 1);
   const prevStep = () => setStep(step - 1);
 
-  const barbers = data?.usuarios.filter(u => u.role === 'barber' && u.activo) || [];
+  const barbers = data?.usuarios.filter(u => (u.role === 'barber' || u.role === 'barbero') && u.activo) || [];
   const services = data?.servicios.filter(s => s.activo) || [];
 
   const timeSlots = [
@@ -311,7 +311,7 @@ export default function BookingPage() {
                         </button>
                         {barbers.map(b => (
                             <button
-                                key={b.id}
+                                key={b.usuario || b.nombre}
                                 onClick={() => setBarber(b.nombre)}
                                 className={cn(
                                     "p-4 rounded-xl border text-sm font-bold uppercase transition-all flex flex-col items-center gap-2",

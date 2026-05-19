@@ -8,7 +8,7 @@ export interface User {
   usuario: string;
   password?: string;
   nombre: string;
-  role: 'owner' | 'barber';
+  role: 'owner' | 'barber' | 'barbero';
   activo: boolean;
   porcentaje: number;
 }
