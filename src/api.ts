@@ -43,25 +43,75 @@ const gasFetch = async (action: string, payload: any = {}) => {
 
 export const api = {
   login: async (usuario: string, password: string): Promise<User> => {
-    return gasFetch('login', { usuario, password });
+    const u = await gasFetch('login', { usuario, password });
+    return {
+      ...u,
+      id: String(u.id || ''),
+      usuario: String(u.usuario || '').trim(),
+      nombre: String(u.nombre || '').trim(),
+      role: String(u.role || 'barber').toLowerCase().trim() as any,
+      activo: u.activo === true || String(u.activo).toUpperCase().trim() === 'TRUE' || String(u.activo).trim() === '1',
+      porcentaje: Number(u.porcentaje || 0)
+    };
   },
   
   loadAllData: async (): Promise<AppData> => {
     const data = await gasFetch('loadAllData');
     if (!data) return { usuarios: [], servicios: [], productos: [], ventas: [], citas: [], gastos: [], config: [] };
     
+    // Normalize usuarios
+    if (data.usuarios && Array.isArray(data.usuarios)) {
+      data.usuarios = data.usuarios.map((u: any) => ({
+        ...u,
+        id: String(u.id || ''),
+        usuario: String(u.usuario || '').trim(),
+        nombre: String(u.nombre || '').trim(),
+        role: String(u.role || 'barber').toLowerCase().trim() as any,
+        activo: u.activo === true || String(u.activo).toUpperCase().trim() === 'TRUE' || String(u.activo).trim() === '1',
+        porcentaje: Number(u.porcentaje || 0)
+      }));
+    }
+    
+    const normalizeDateStr = (rawDate: any): string => {
+      if (!rawDate) return new Date().toISOString().split('T')[0];
+      const dateStr = String(rawDate).trim();
+      
+      // If it contains a date that has 1899-12-30 (Google representation of time value without a date)
+      if (dateStr.includes('1899-12-30')) {
+        // Use today's local date
+        const d = new Date();
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      // If it's a full ISO string (e.g., 2026-05-20T01:46:40.000Z)
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T/)) {
+        return dateStr.split('T')[0];
+      }
+      
+      // Try to parse standard representation safely in local timezone
+      try {
+        const parsed = new Date(dateStr);
+        if (!isNaN(parsed.getTime())) {
+          const yyyy = parsed.getFullYear();
+          const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+          const dd = String(parsed.getDate()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd}`;
+        }
+      } catch (e) {}
+
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        return dateStr;
+      }
+      return dateStr;
+    };
+
     if (data.citas && Array.isArray(data.citas)) {
       data.citas = data.citas.map((c: any) => {
-        // Normalize fecha: extract YYYY-MM-DD if it's a full ISO string
-        let normalizedDate = c.fecha;
-        if (typeof normalizedDate === 'string' && normalizedDate.match(/^\d{4}-\d{2}-\d{2}T/)) {
-          normalizedDate = normalizedDate.split('T')[0];
-        } else if (typeof normalizedDate === 'string' && normalizedDate.includes('1899-12-30')) {
-          // This happens when Sheets has a time value in a date column
-          // We might need to look at another column or just default to today
-          normalizedDate = new Date().toISOString().split('T')[0];
-        }
-
+        const normalizedDate = normalizeDateStr(c.fecha);
+        
         // Normalize hora: extract time if it's a full ISO string
         let normalizedTime = c.hora;
         if (typeof normalizedTime === 'string' && normalizedTime.match(/^\d{4}-\d{2}-\d{2}T/)) {
@@ -70,7 +120,7 @@ export const api = {
 
         return {
           id: c.id || String(c.fecha) + String(c.hora) + String(c.cliente),
-          fecha: normalizedDate || new Date().toISOString().split('T')[0],
+          fecha: normalizedDate,
           hora: normalizedTime || '09:00',
           cliente: c.cliente || 'Sin nombre',
           telefono: c.telefono || '',
@@ -80,6 +130,23 @@ export const api = {
           barbero: c.barbero || 'Cualquier barbero'
         };
       });
+    }
+
+    if (data.ventas && Array.isArray(data.ventas)) {
+      data.ventas = data.ventas.map((v: any) => ({
+        ...v,
+        fecha: normalizeDateStr(v.fecha),
+        valor: Number(v.valor || 0),
+        cantidad: Number(v.cantidad || 1)
+      }));
+    }
+
+    if (data.gastos && Array.isArray(data.gastos)) {
+      data.gastos = data.gastos.map((g: any) => ({
+        ...g,
+        fecha: normalizeDateStr(g.fecha),
+        monto: Number(g.monto || 0)
+      }));
     }
     
     return data;

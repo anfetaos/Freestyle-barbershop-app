@@ -24,6 +24,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedBarber, setSelectedBarber] = useState<string>('todos');
 
   const [newCita, setNewCita] = useState<Partial<Appointment>>({
     fecha: selectedDate,
@@ -42,8 +43,26 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     }
   }, [selectedDate, isModalOpen]);
 
+  // Generate day details for a scannable day strip
+  const getDayDetails = (dateStr: string, offset: number) => {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + offset);
+    const dayName = d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '');
+    const dayNum = d.getDate();
+    const fullDate = d.toISOString().split('T')[0];
+    return { dayName, dayNum, fullDate, isToday: fullDate === new Date().toISOString().split('T')[0] };
+  };
+
+  const daysList = React.useMemo(() => {
+    const list = [];
+    for (let i = -3; i <= 5; i++) {
+      list.push(getDayDetails(selectedDate, i));
+    }
+    return list;
+  }, [selectedDate]);
+
   const filteredAppointments = data.citas
-    .filter(c => c.fecha === selectedDate)
+    .filter(c => c.fecha === selectedDate && (selectedBarber === 'todos' || c.barbero === selectedBarber))
     .sort((a, b) => a.hora.localeCompare(b.hora));
 
   const handleSave = async (e: React.FormEvent) => {
@@ -153,6 +172,78 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
         >
           <Plus size={18} /> NUEVA CITA
         </button>
+      </div>
+
+      {/* Calendar Strip & Quick Filters */}
+      <div className="flex flex-col gap-4 bg-d1/30 p-4 border border-d3 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Acceso rápido:</span>
+            <button 
+              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+              className={cn(
+                "px-3 py-1 text-xs font-bold rounded-lg border transition-all uppercase tracking-wide",
+                selectedDate === new Date().toISOString().split('T')[0]
+                  ? "bg-brand-blue text-bg border-brand-blue shadow-lg shadow-brand-blue/10"
+                  : "bg-d1 border-d3 text-txt hover:bg-d2"
+              )}
+            >
+              Hoy
+            </button>
+            <button 
+              onClick={() => {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                setSelectedDate(tomorrow.toISOString().split('T')[0]);
+              }}
+              className={cn(
+                "px-3 py-1 text-xs font-bold rounded-lg border transition-all uppercase tracking-wide",
+                selectedDate === new Date(Date.now() + 86400000).toISOString().split('T')[0]
+                  ? "bg-brand-blue text-bg border-brand-blue shadow-lg shadow-brand-blue/10"
+                  : "bg-d1 border-d3 text-txt hover:bg-d2"
+              )}
+            >
+              Mañana
+            </button>
+          </div>
+          
+          {/* Barber filter */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Barbero:</span>
+            <select
+              value={selectedBarber}
+              onChange={(e) => setSelectedBarber(e.target.value)}
+              className="bg-d1 border border-d3 text-txt text-xs font-bold rounded-lg px-3 py-1.5 outline-none focus:border-brand-blue cursor-pointer"
+            >
+              <option value="todos">Todos los Barberos</option>
+              {data.usuarios.filter(u => u.role === 'barber' || u.role === 'barbero').map(u => (
+                <option key={u.usuario || u.nombre} value={u.nombre}>{u.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Days Strip Row */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none scrollbar-thin">
+          {daysList.map((day) => (
+            <button
+              key={day.fullDate}
+              onClick={() => setSelectedDate(day.fullDate)}
+              className={cn(
+                "flex flex-col items-center justify-center min-w-[55px] p-2 rounded-xl border transition-all relative shrink-0",
+                selectedDate === day.fullDate
+                  ? "bg-brand-blue/20 text-brand-blue border-brand-blue"
+                  : "bg-d1 border-d3 hover:bg-d2 text-txt"
+              )}
+            >
+              <span className="text-[9px] font-bold uppercase tracking-wider opacity-80">{day.dayName}</span>
+              <span className="text-sm font-black tracking-tight">{day.dayNum}</span>
+              {day.isToday && (
+                <span className="absolute bottom-1 w-1 h-1 bg-brand-gold rounded-full animate-pulse"></span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Grid Appointments */}

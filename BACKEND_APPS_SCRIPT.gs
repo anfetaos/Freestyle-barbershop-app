@@ -217,8 +217,13 @@ function editAppointment(id, apt) {
   var idCol = headers.indexOf('id');
   if (idCol === -1) idCol = 0; // Fallback to first column
   
+  var fechaCol = headers.indexOf('fecha');
+  var horaCol = headers.indexOf('hora');
+  var clienteCol = headers.indexOf('cliente');
+  
   for (var i = 1; i < data.length; i++) {
-    if (data[i][idCol] == id) {
+    // 1. Match by Raw ID column
+    if (data[i][idCol] && String(data[i][idCol]).trim() === String(id).trim()) {
       for (var key in apt) {
         var col = headers.indexOf(key.toLowerCase());
         if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
@@ -226,6 +231,45 @@ function editAppointment(id, apt) {
       return true;
     }
   }
+  
+  // 2. Fallback: Match by normalized date, time and client if ID-based match failed
+  for (var i = 1; i < data.length; i++) {
+    var rawFecha = data[i][fechaCol];
+    var rawHora = data[i][horaCol];
+    var rawCliente = data[i][clienteCol];
+    
+    var fmtFecha = "";
+    if (rawFecha instanceof Date) {
+      fmtFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone(), "yyyy-MM-dd");
+    } else {
+      fmtFecha = String(rawFecha || "").trim();
+      if (fmtFecha.match(/^\d{4}-\d{2}-\d{2}T/)) {
+        fmtFecha = fmtFecha.split('T')[0];
+      }
+    }
+    
+    var fmtHora = "";
+    if (rawHora instanceof Date) {
+      fmtHora = Utilities.formatDate(rawHora, Session.getScriptTimeZone(), "HH:mm");
+    } else {
+      fmtHora = String(rawHora || "").trim();
+      if (fmtHora.match(/^\d{4}-\d{2}-\d{2}T/)) {
+        fmtHora = fmtHora.split('T')[1].substring(0, 5);
+      }
+    }
+    
+    var compositeId1 = fmtFecha + fmtHora + String(rawCliente || "").trim();
+    var rawStringId = String(rawFecha) + String(rawHora) + String(rawCliente);
+    
+    if (compositeId1 === id || rawStringId === id) {
+      for (var key in apt) {
+        var col = headers.indexOf(key.toLowerCase());
+        if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
+      }
+      return true;
+    }
+  }
+  
   throw new Error("Cita no encontrada");
 }
 

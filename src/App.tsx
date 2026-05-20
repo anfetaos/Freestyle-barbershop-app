@@ -69,7 +69,7 @@ export default function App() {
       case 'productos': return <Products data={data} onRefresh={loadData} isAdmin={user.role === 'owner'} />;
       case 'servicios': return <Services data={data} onRefresh={loadData} isAdmin={user.role === 'owner'} />;
       case 'usuarios': return <Users data={data} onRefresh={loadData} />;
-      case 'reportes': return <Reports data={data} user={user} />;
+      case 'reportes': return <Reports data={data} user={user} onRefresh={loadData} />;
       case 'config': return <Settings data={data} onRefresh={loadData} />;
       default: return <Dashboard data={data} user={user} onTabChange={setActiveTab} />;
     }
