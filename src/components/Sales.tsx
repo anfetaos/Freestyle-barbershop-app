@@ -13,7 +13,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { AppData, SaleItem, Service, Product, User } from '../types';
-import { formatCurrency, cn } from '../utils';
+import { formatCurrency, cn, getBogotaDateString } from '../utils';
 import { api } from '../api';
 
 export default function Sales({ data, onRefresh, user, onBack }: { data: AppData, onRefresh: () => void, user: User, onBack?: () => void }) {
@@ -69,7 +69,7 @@ export default function Sales({ data, onRefresh, user, onBack }: { data: AppData
       await api.saveSale({
         items: cart,
         usuario: user.usuario,
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: getBogotaDateString(),
       });
       setCart([]);
       setSuccess(true);

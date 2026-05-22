@@ -221,9 +221,24 @@ function editAppointment(id, apt) {
   var horaCol = headers.indexOf('hora');
   var clienteCol = headers.indexOf('cliente');
   
+  var idStr = String(id || "").trim();
+  
+  // Try splitting by underscore for "YYYY-MM-DD_HH:MM_Cliente" format
+  var parts = idStr.split('_');
+  var hasParsedParts = false;
+  var parsedFecha = "";
+  var parsedHora = "";
+  var parsedCliente = "";
+  if (parts.length >= 3 && parts[0].match(/^\d{4}-\d{2}-\d{2}$/) && parts[1].match(/^\d{2}:\d{2}$/)) {
+    hasParsedParts = true;
+    parsedFecha = parts[0];
+    parsedHora = parts[1];
+    parsedCliente = parts.slice(2).join('_').trim().toLowerCase();
+  }
+
   for (var i = 1; i < data.length; i++) {
     // 1. Match by Raw ID column
-    if (data[i][idCol] && String(data[i][idCol]).trim() === String(id).trim()) {
+    if (data[i][idCol] && String(data[i][idCol]).trim() === idStr) {
       for (var key in apt) {
         var col = headers.indexOf(key.toLowerCase());
         if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
@@ -232,15 +247,16 @@ function editAppointment(id, apt) {
     }
   }
   
-  // 2. Fallback: Match by normalized date, time and client if ID-based match failed
+  // 2. Fallback: Match by normalized date, time and client
   for (var i = 1; i < data.length; i++) {
     var rawFecha = data[i][fechaCol];
     var rawHora = data[i][horaCol];
     var rawCliente = data[i][clienteCol];
+    var strCliente = String(rawCliente || "").trim();
     
     var fmtFecha = "";
     if (rawFecha instanceof Date) {
-      fmtFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      fmtFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone() || "GMT", "yyyy-MM-dd");
     } else {
       fmtFecha = String(rawFecha || "").trim();
       if (fmtFecha.match(/^\d{4}-\d{2}-\d{2}T/)) {
@@ -250,18 +266,39 @@ function editAppointment(id, apt) {
     
     var fmtHora = "";
     if (rawHora instanceof Date) {
-      fmtHora = Utilities.formatDate(rawHora, Session.getScriptTimeZone(), "HH:mm");
+      fmtHora = Utilities.formatDate(rawHora, Session.getScriptTimeZone() || "GMT", "HH:mm");
     } else {
       fmtHora = String(rawHora || "").trim();
       if (fmtHora.match(/^\d{4}-\d{2}-\d{2}T/)) {
         fmtHora = fmtHora.split('T')[1].substring(0, 5);
+      } else if (fmtHora.match(/^\d{2}:\d{2}$/)) {
+        // already HH:mm
+      } else if (fmtHora.match(/^\d{2}:\d{2}:\d{2}$/)) {
+        fmtHora = fmtHora.substring(0, 5);
       }
     }
     
-    var compositeId1 = fmtFecha + fmtHora + String(rawCliente || "").trim();
+    // Check various combinations
+    var compositeIdPattern1 = fmtFecha + fmtHora + strCliente;
+    var compositeIdPattern2 = fmtFecha + "_" + fmtHora + "_" + strCliente;
     var rawStringId = String(rawFecha) + String(rawHora) + String(rawCliente);
     
-    if (compositeId1 === id || rawStringId === id) {
+    var isMatch = false;
+    
+    if (compositeIdPattern1 === idStr || 
+        compositeIdPattern2 === idStr || 
+        rawStringId === idStr ||
+        compositeIdPattern2.toLowerCase() === idStr.toLowerCase() ||
+        compositeIdPattern1.toLowerCase() === idStr.toLowerCase()) {
+      isMatch = true;
+    } else if (hasParsedParts) {
+      // If we parsed YYYY-MM-DD_HH:MM_Cliente, do a direct normalized compare
+      if (fmtFecha === parsedFecha && fmtHora === parsedHora && strCliente.toLowerCase() === parsedCliente) {
+        isMatch = true;
+      }
+    }
+    
+    if (isMatch) {
       for (var key in apt) {
         var col = headers.indexOf(key.toLowerCase());
         if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);

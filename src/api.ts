@@ -1,4 +1,5 @@
 import { AppData, User } from './types';
+import { parseFechaBogota, parseHoraBogota } from './utils';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyVXijFTgUwIKKA9wxCoQ-McPeu3oSw2tzIKNmaliLDkmhY0RCHKbSqKA5Tj_TRjO3D6A/exec';
 
@@ -72,57 +73,20 @@ export const api = {
       }));
     }
     
-    const normalizeDateStr = (rawDate: any): string => {
-      if (!rawDate) return new Date().toISOString().split('T')[0];
-      const dateStr = String(rawDate).trim();
-      
-      // If it contains a date that has 1899-12-30 (Google representation of time value without a date)
-      if (dateStr.includes('1899-12-30')) {
-        // Use today's local date
-        const d = new Date();
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        return `${yyyy}-${mm}-${dd}`;
-      }
-
-      // If it's a full ISO string (e.g., 2026-05-20T01:46:40.000Z)
-      if (dateStr.match(/^\d{4}-\d{2}-\d{2}T/)) {
-        return dateStr.split('T')[0];
-      }
-      
-      // Try to parse standard representation safely in local timezone
-      try {
-        const parsed = new Date(dateStr);
-        if (!isNaN(parsed.getTime())) {
-          const yyyy = parsed.getFullYear();
-          const mm = String(parsed.getMonth() + 1).padStart(2, '0');
-          const dd = String(parsed.getDate()).padStart(2, '0');
-          return `${yyyy}-${mm}-${dd}`;
-        }
-      } catch (e) {}
-
-      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return dateStr;
-      }
-      return dateStr;
-    };
-
     if (data.citas && Array.isArray(data.citas)) {
       data.citas = data.citas.map((c: any) => {
-        const normalizedDate = normalizeDateStr(c.fecha);
-        
-        // Normalize hora: extract time if it's a full ISO string
-        let normalizedTime = c.hora;
-        if (typeof normalizedTime === 'string' && normalizedTime.match(/^\d{4}-\d{2}-\d{2}T/)) {
-          normalizedTime = normalizedTime.split('T')[1].substring(0, 5);
-        }
+        const normalizedDate = parseFechaBogota(c.fecha);
+        const normalizedTime = parseHoraBogota(c.hora);
+
+        const safeTime = normalizedTime || '09:30';
+        const safeCliente = c.cliente || 'Sin nombre';
+        const fallbackId = `${normalizedDate}_${safeTime}_${String(safeCliente).trim()}`;
 
         return {
-          id: c.id || String(c.fecha) + String(c.hora) + String(c.cliente),
+          id: c.id || fallbackId,
           fecha: normalizedDate,
-          hora: normalizedTime || '09:30',
-          cliente: c.cliente || 'Sin nombre',
+          hora: safeTime,
+          cliente: safeCliente,
           telefono: c.telefono || '',
           servicio_id: c.servicio_id || '',
           servicio: c.servicio || '',
@@ -135,7 +99,7 @@ export const api = {
     if (data.ventas && Array.isArray(data.ventas)) {
       data.ventas = data.ventas.map((v: any) => ({
         ...v,
-        fecha: normalizeDateStr(v.fecha),
+        fecha: parseFechaBogota(v.fecha),
         valor: Number(v.valor || 0),
         cantidad: Number(v.cantidad || 1)
       }));
@@ -144,7 +108,7 @@ export const api = {
     if (data.gastos && Array.isArray(data.gastos)) {
       data.gastos = data.gastos.map((g: any) => ({
         ...g,
-        fecha: normalizeDateStr(g.fecha),
+        fecha: parseFechaBogota(g.fecha),
         monto: Number(g.monto || 0)
       }));
     }

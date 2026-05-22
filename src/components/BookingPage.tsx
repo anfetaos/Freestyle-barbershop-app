@@ -48,7 +48,11 @@ export default function BookingPage() {
     setSearching(true);
     try {
       const res = await api.loadAllData();
-      const filtered = res.citas.filter(c => c.telefono === searchPhone && c.estado !== 'cancelada');
+      const normalizedQuery = formatWhatsAppPhone(searchPhone);
+      const filtered = res.citas.filter(c => {
+        const normalizedCitaPhone = formatWhatsAppPhone(c.telefono || '');
+        return normalizedCitaPhone === normalizedQuery && c.estado !== 'cancelada';
+      });
       setMyCitas(filtered);
     } catch (err) {
       console.error(err);
@@ -266,15 +270,21 @@ export default function BookingPage() {
         {view === 'my-bookings' ? (
           <div className="space-y-8">
              <div className="glass-card p-6 border-white/5">
-                <label className="text-[10px] font-bold text-muted uppercase tracking-widest block mb-4">Ingresa tu número de teléfono</label>
+                <label className="text-[10px] font-bold text-muted uppercase tracking-widest block mb-4">Ingresa tu número de teléfono (10 dígitos)</label>
                 <div className="flex gap-2">
-                   <input 
-                      type="tel" 
-                      placeholder="Ej. 300 000 0000"
-                      className="flex-1 bg-d1 border border-white/5 rounded-xl p-4 text-txt outline-none focus:border-brand-blue/50 transition-all font-mono"
-                      value={searchPhone}
-                      onChange={(e) => setSearchPhone(e.target.value)}
-                   />
+                   <div className="relative flex-1 flex items-center">
+                      <span className="absolute left-4 text-muted/70 text-sm font-mono select-none pointer-events-none">+57</span>
+                      <input 
+                         type="tel" 
+                         placeholder="300 000 0000"
+                         className="w-full bg-d1 border border-white/5 rounded-xl p-4 pl-14 text-txt outline-none focus:border-brand-blue/50 transition-all font-mono tracking-wide"
+                         value={searchPhone}
+                         onChange={(e) => {
+                            const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                            setSearchPhone(val);
+                         }}
+                      />
+                   </div>
                    <button 
                       onClick={handleSearch}
                       disabled={searching}
@@ -501,14 +511,20 @@ export default function BookingPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-muted uppercase tracking-widest ml-1">Teléfono</label>
-                    <input 
-                      type="tel" 
-                      placeholder="Ej. 300 123 4567"
-                      className="w-full bg-d1 border border-white/5 rounded-xl p-4 text-txt outline-none focus:border-brand-blue/50 transition-all"
-                      value={customer.telefono}
-                      onChange={(e) => setCustomer({...customer, telefono: e.target.value})}
-                    />
+                    <label className="text-[10px] font-bold text-muted uppercase tracking-widest ml-1">Teléfono (10 dígitos)</label>
+                    <div className="relative flex items-center shadow-xs">
+                      <span className="absolute left-4 text-muted/70 text-sm font-mono select-none pointer-events-none">+57</span>
+                      <input 
+                        type="tel" 
+                        placeholder="300 123 4567"
+                        className="w-full bg-d1 border border-white/5 rounded-xl p-4 pl-14 text-txt outline-none focus:border-brand-blue/50 transition-all font-mono tracking-wide"
+                        value={customer.telefono}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                          setCustomer({...customer, telefono: val});
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 

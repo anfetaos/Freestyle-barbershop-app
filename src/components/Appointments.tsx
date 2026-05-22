@@ -17,11 +17,11 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AppData, Appointment, Service, User as BarberUser } from '../types';
-import { formatCurrency, cn, formatWhatsAppPhone } from '../utils';
+import { formatCurrency, cn, formatWhatsAppPhone, getBogotaDateString } from '../utils';
 import { api } from '../api';
 
 export default function Appointments({ data, onRefresh, user }: { data: AppData, onRefresh: () => void, user: BarberUser }) {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getBogotaDateString());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedBarber, setSelectedBarber] = useState<string>('todos');
@@ -49,8 +49,8 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     d.setDate(d.getDate() + offset);
     const dayName = d.toLocaleDateString('es-ES', { weekday: 'short' }).replace('.', '');
     const dayNum = d.getDate();
-    const fullDate = d.toISOString().split('T')[0];
-    return { dayName, dayNum, fullDate, isToday: fullDate === new Date().toISOString().split('T')[0] };
+    const fullDate = getBogotaDateString(d);
+    return { dayName, dayNum, fullDate, isToday: fullDate === getBogotaDateString() };
   };
 
   const daysList = React.useMemo(() => {
@@ -92,7 +92,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
       // 2. Create a sale with items array as expected by GAS
       const service = data.servicios.find(s => s.id === cita.servicio_id);
       await api.saveSale({
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: getBogotaDateString(),
         usuario: data.usuarios.find(u => u.nombre === cita.barbero)?.usuario || user.usuario,
         items: [{
           id: cita.servicio_id,
@@ -125,7 +125,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
   const handleDateChange = (days: number) => {
     const current = new Date(selectedDate + 'T00:00:00');
     current.setDate(current.getDate() + days);
-    setSelectedDate(current.toISOString().split('T')[0]);
+    setSelectedDate(getBogotaDateString(current));
   };
 
   return (
@@ -180,10 +180,10 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted">Acceso rápido:</span>
             <button 
-              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+              onClick={() => setSelectedDate(getBogotaDateString())}
               className={cn(
                 "px-3 py-1 text-xs font-bold rounded-lg border transition-all uppercase tracking-wide",
-                selectedDate === new Date().toISOString().split('T')[0]
+                selectedDate === getBogotaDateString()
                   ? "bg-brand-blue text-bg border-brand-blue shadow-lg shadow-brand-blue/10"
                   : "bg-d1 border-d3 text-txt hover:bg-d2"
               )}
@@ -192,13 +192,12 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
             </button>
             <button 
               onClick={() => {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                setSelectedDate(tomorrow.toISOString().split('T')[0]);
+                const tomorrow = new Date(Date.now() + 86400000);
+                setSelectedDate(getBogotaDateString(tomorrow));
               }}
               className={cn(
                 "px-3 py-1 text-xs font-bold rounded-lg border transition-all uppercase tracking-wide",
-                selectedDate === new Date(Date.now() + 86400000).toISOString().split('T')[0]
+                selectedDate === getBogotaDateString(new Date(Date.now() + 86400000))
                   ? "bg-brand-blue text-bg border-brand-blue shadow-lg shadow-brand-blue/10"
                   : "bg-d1 border-d3 text-txt hover:bg-d2"
               )}
@@ -397,8 +396,21 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
               </div>
 
               <div>
-                <label className="block text-xs uppercase font-bold text-muted mb-2">Teléfono</label>
-                <input type="tel" required placeholder="300 000 0000" value={newCita.telefono} onChange={e => setNewCita({...newCita, telefono: e.target.value})} className="w-full bg-bg border border-white/10 rounded-lg px-4 py-2.5 text-txt text-sm outline-none focus:border-brand-blue" />
+                <label className="block text-xs uppercase font-bold text-muted mb-2">Teléfono (10 dígitos)</label>
+                <div className="relative flex items-center">
+                  <span className="absolute left-3.5 text-muted/70 text-sm font-mono select-none pointer-events-none">+57</span>
+                  <input 
+                    type="tel" 
+                    required 
+                    placeholder="300 000 0000" 
+                    value={newCita.telefono || ''} 
+                    onChange={e => {
+                      const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                      setNewCita({...newCita, telefono: val});
+                    }} 
+                    className="w-full bg-bg border border-white/10 rounded-lg pl-[46px] pr-4 py-2.5 text-txt text-sm outline-none focus:border-brand-blue font-mono tracking-wide" 
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
