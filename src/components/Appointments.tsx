@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AppData, Appointment, Service, User as BarberUser } from '../types';
-import { formatCurrency, cn } from '../utils';
+import { formatCurrency, cn, formatWhatsAppPhone } from '../utils';
 import { api } from '../api';
 
 export default function Appointments({ data, onRefresh, user }: { data: AppData, onRefresh: () => void, user: BarberUser }) {
@@ -282,10 +282,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                           href={(() => {
                             const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
                             const msg = `Hola ${cita.cliente}, te escribimos de *${shopName}* para confirmar tu cita del día *${cita.fecha}* a las *${cita.hora}* para el servicio de *${cita.servicio}* con el barbero *${cita.barbero}*. ¿Nos confirmas tu asistencia? 👍🏻`;
-                            let phone = cita.telefono.replace(/[^\d+]/g, '');
-                            if (phone.length === 10 && phone.startsWith('3')) {
-                              phone = '57' + phone;
-                            }
+                            const phone = formatWhatsAppPhone(cita.telefono);
                             return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
                           })()}
                           target="_blank"
@@ -300,10 +297,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                             const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
                             const bookingUrl = window.location.href.split('#')[0].split('?')[0] + '#/reservar';
                             const msg = `Hola ${cita.cliente}, te escribimos de *${shopName}* para informarte que tu cita programada del *${cita.fecha}* a las *${cita.hora}* ha sido cancelada. Si deseas reagendar, puedes ver los horarios disponibles aquí: ${bookingUrl}`;
-                            let phone = cita.telefono.replace(/[^\d+]/g, '');
-                            if (phone.length === 10 && phone.startsWith('3')) {
-                              phone = '57' + phone;
-                            }
+                            const phone = formatWhatsAppPhone(cita.telefono);
                             return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
                           })()}
                           target="_blank"

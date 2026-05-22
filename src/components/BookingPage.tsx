@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { AppData, Service, User, Appointment } from '../types';
-import { formatCurrency, cn } from '../utils';
+import { formatCurrency, cn, formatWhatsAppPhone } from '../utils';
 import { 
   Calendar, 
   Clock, 
@@ -22,10 +22,18 @@ export default function BookingPage() {
   const [step, setStep] = useState(1);
   const [success, setSuccess] = useState(false);
 
+  // Local date/time helper for Colombian/local timezone
+  const getLocalDateString = (d: Date = new Date()) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // Selection state
   const [service, setService] = useState<Service | null>(null);
   const [barber, setBarber] = useState<string>('Cualquier barbero'); // barber nombre
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(getLocalDateString());
   const [time, setTime] = useState<string>('');
   const [customer, setCustomer] = useState({ nombre: '', telefono: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -90,6 +98,24 @@ export default function BookingPage() {
 
   // Helper to determine if a slot is busy on the selected date for the selected barber or overall
   const getSlotStatus = (t: string) => {
+    const todayStr = getLocalDateString();
+    
+    // Prevent prior dates
+    if (date < todayStr) {
+      return { isBusy: true, reason: 'Pasado' };
+    }
+    
+    // Prevent prior hours for the current day
+    if (date === todayStr) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      const [slotHour, slotMin] = t.split(':').map(Number);
+      if (slotHour < currentHour || (slotHour === currentHour && slotMin <= currentMinute)) {
+        return { isBusy: true, reason: 'Pasado' };
+      }
+    }
+
     if (!data?.citas) return { isBusy: false, reason: '' };
     
     // Find all active non-cancelled appointments at this exact date and hourly slot
@@ -133,12 +159,13 @@ export default function BookingPage() {
     if (!service || !date || !time || !customer.nombre || !customer.telefono) return;
     setSubmitting(true);
     try {
+      const normalizedPhone = formatWhatsAppPhone(customer.telefono);
       await api.saveAppointment({
         id: `cita_${Date.now()}`,
         fecha: date,
         hora: time,
         cliente: customer.nombre,
-        telefono: customer.telefono,
+        telefono: normalizedPhone,
         servicio_id: service.id,
         servicio: service.nombre,
         barbero: barber,
@@ -182,7 +209,7 @@ export default function BookingPage() {
           {service && (
             <a 
               href={(() => {
-                const shopWhatsApp = data?.config?.find(c => c.key === 'whatsapp')?.value || '';
+                const targetPhone = '573224680553';
                 const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
                 const msg = `Hola, acabo de agendar mi cita por la web:\n\n` +
                   `✂️ *Servicio:* ${service.nombre}\n` +
@@ -193,11 +220,7 @@ export default function BookingPage() {
                   `📱 *Teléfono:* ${customer.telefono}\n\n` +
                   `Por favor confirmen mi reserva. ¡Muchas gracias!`;
                 
-                let phone = shopWhatsApp.replace(/[^\d+]/g, '');
-                if (phone.length === 10 && phone.startsWith('3')) {
-                  phone = '57' + phone;
-                }
-                return `https://wa.me/${phone || '573000000000'}?text=${encodeURIComponent(msg)}`;
+                return `https://wa.me/${targetPhone}?text=${encodeURIComponent(msg)}`;
               })()}
               target="_blank"
               rel="noreferrer"
@@ -404,14 +427,14 @@ export default function BookingPage() {
                     </div>
                     <input 
                         type="date" 
-                        min={new Date().toISOString().split('T')[0]}
+                        min={getLocalDateString()}
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
                         className="w-full bg-d1 border border-white/5 rounded-xl p-4 text-txt outline-none focus:border-brand-blue/50 transition-all font-bold"
                     />
                     <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2.5">
                         {timeSlots.map(t => {
-                            const { isBusy } = getSlotStatus(t);
+                            const { isBusy, reason } = getSlotStatus(t);
                             return (
                                 <button
                                     key={t}
@@ -429,7 +452,7 @@ export default function BookingPage() {
                                     <span>{t}</span>
                                     {isBusy && (
                                       <span className="block text-[8px] font-sans tracking-wide uppercase font-black text-danger leading-none no-underline">
-                                        Ocupado
+                                        {reason || 'Ocupado'}
                                       </span>
                                     )}
                                 </button>
