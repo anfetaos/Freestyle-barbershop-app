@@ -110,6 +110,11 @@ function getSheet(name) {
     }
   }
   
+  // Set B column (Hora) format to plain text to prevent 1899 epoch Bogota offset shift
+  if (name == "citas") {
+    sheet.getRange("B:B").setNumberFormat("@");
+  }
+  
   return sheet;
 }
 
@@ -117,44 +122,58 @@ function normalizeTimeToHHMM(valStr) {
   var str = String(valStr || "").trim();
   if (!str) return "09:30";
   
+  var hh = 9;
+  var mm = 30;
+  var parsed = false;
+  
   var match24 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (match24) {
-    var hh = parseInt(match24[1], 10);
-    var mm = parseInt(match24[2], 10);
-    var hStr = hh < 10 ? '0' + hh : String(hh);
-    var mStr = mm < 10 ? '0' + mm : String(mm);
-    return hStr + ":" + mStr;
+    hh = parseInt(match24[1], 10);
+    mm = parseInt(match24[2], 10);
+    parsed = true;
+  } else {
+    var match12 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)$/i);
+    if (match12) {
+      hh = parseInt(match12[1], 10);
+      mm = parseInt(match12[2], 10);
+      var ampm = match12[3].toLowerCase();
+      
+      if (ampm === "pm" && hh < 12) {
+        hh += 12;
+      } else if (ampm === "am" && hh === 12) {
+        hh = 0;
+      }
+      parsed = true;
+    } else if (str.indexOf('T') !== -1) {
+      var parts = str.split('T');
+      var timePart = parts[1] || "";
+      if (timePart.length >= 5) {
+        var matchSplit = timePart.match(/^(\d{1,2}):(\d{2})/);
+        if (matchSplit) {
+          hh = parseInt(matchSplit[1], 10);
+          mm = parseInt(matchSplit[2], 10);
+          parsed = true;
+        }
+      }
+    } else {
+      var genericMatch = str.match(/^(\d{1,2}):(\d{2})/);
+      if (genericMatch) {
+        hh = parseInt(genericMatch[1], 10);
+        mm = parseInt(genericMatch[2], 10);
+        parsed = true;
+      }
+    }
   }
   
-  var match12 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)$/i);
-  if (match12) {
-    var hh = parseInt(match12[1], 10);
-    var mm = parseInt(match12[2], 10);
-    var ampm = match12[3].toLowerCase();
-    
-    if (ampm === "pm" && hh < 12) {
-      hh += 12;
-    } else if (ampm === "am" && hh === 12) {
-      hh = 0;
+  if (parsed) {
+    // Correct the 4-minute timezone shift from Google Sheets 1899 epoch logic (which had -04:56 local offset for America/Bogota)
+    if (mm === 26 || mm === 25 || mm === 27) {
+      mm = 30;
+    } else if (mm === 56 || mm === 55 || mm === 57) {
+      mm = 0;
+      hh = (hh + 1) % 24;
     }
     
-    var hStr = hh < 10 ? '0' + hh : String(hh);
-    var mStr = mm < 10 ? '0' + mm : String(mm);
-    return hStr + ":" + mStr;
-  }
-  
-  if (str.indexOf('T') !== -1) {
-    var parts = str.split('T');
-    var timePart = parts[1] || "";
-    if (timePart.length >= 5) {
-      return timePart.substring(0, 5);
-    }
-  }
-  
-  var genericMatch = str.match(/^(\d{1,2}):(\d{2})/);
-  if (genericMatch) {
-    var hh = parseInt(genericMatch[1], 10);
-    var mm = parseInt(genericMatch[2], 10);
     var hStr = hh < 10 ? '0' + hh : String(hh);
     var mStr = mm < 10 ? '0' + mm : String(mm);
     return hStr + ":" + mStr;
@@ -277,7 +296,7 @@ function saveAppointment(apt) {
   var sheet = getSheet("citas");
   sheet.appendRow([
     apt.fecha,
-    apt.hora,
+    "'" + apt.hora, // Prepend single quote to force Plain Text storage and avoid 1899 shifts
     apt.cliente,
     apt.telefono,
     apt.servicio_id,
@@ -364,7 +383,13 @@ function editAppointment(id, apt) {
   var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
   for (var key in apt) {
     var col = headers.indexOf(key.toLowerCase());
-    if (col > -1) sheet.getRange(rowIdx, col + 1).setValue(apt[key]);
+    if (col > -1) {
+      var val = apt[key];
+      if (key.toLowerCase() === "hora") {
+        val = "'" + val; // Prepend single quote to force Plain Text
+      }
+      sheet.getRange(rowIdx, col + 1).setValue(val);
+    }
   }
   return true;
 }
