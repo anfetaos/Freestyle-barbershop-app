@@ -57,6 +57,24 @@ export const parseHoraBogota = (rawTime: any): string => {
     return str.substring(0, 5);
   }
 
+  // Handle historic 1899 epoch Bogota timezone shift by formatting the date directly
+  if (str.includes('1899')) {
+    try {
+      const parsedDate = new Date(str);
+      if (!isNaN(parsedDate.getTime())) {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Bogota',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false
+        });
+        return formatter.format(parsedDate);
+      }
+    } catch (e) {
+      console.error('Error handling 1899 timestamp:', e);
+    }
+  }
+
   if (str.includes('T')) {
     try {
       const parts = str.split('T');
