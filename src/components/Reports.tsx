@@ -12,7 +12,7 @@ import {
   Calendar
 } from 'lucide-react';
 import { AppData, User } from '../types';
-import { formatCurrency, cn } from '../utils';
+import { formatCurrency, cn, getBogotaDateString } from '../utils';
 import { api } from '../api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
@@ -29,10 +29,7 @@ export default function Reports({
   const [payingUser, setPayingUser] = useState<string | null>(null);
 
   const getLocalDateString = (d: Date = new Date()) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return getBogotaDateString(d);
   };
 
   const [startDate, setStartDate] = useState<string>(() => {

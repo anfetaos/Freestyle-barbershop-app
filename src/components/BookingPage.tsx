@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { AppData, Service, User, Appointment } from '../types';
-import { formatCurrency, cn, formatWhatsAppPhone } from '../utils';
+import { formatCurrency, cn, formatWhatsAppPhone, getBogotaDateString, getBogotaTimeString } from '../utils';
 import { 
   Calendar, 
   Clock, 
@@ -24,10 +24,7 @@ export default function BookingPage() {
 
   // Local date/time helper for Colombian/local timezone
   const getLocalDateString = (d: Date = new Date()) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return getBogotaDateString(d);
   };
 
   // Selection state
@@ -114,9 +111,8 @@ export default function BookingPage() {
     
     // Prevent prior hours for the current day
     if (date === todayStr) {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
+      const bogotaTimeStr = getBogotaTimeString(new Date());
+      const [currentHour, currentMinute] = bogotaTimeStr.split(':').map(Number);
       const [slotHour, slotMin] = t.split(':').map(Number);
       if (slotHour < currentHour || (slotHour === currentHour && slotMin <= currentMinute)) {
         return { isBusy: true, reason: 'Pasado' };
@@ -210,7 +206,7 @@ export default function BookingPage() {
           <p className="text-muted mb-8 italic">Nos vemos pronto en Freestyle Urban Grooming.</p>
           <div className="bg-d2/50 p-4 rounded-xl text-left space-y-2 mb-8">
             <p className="text-xs text-brand-gold font-bold uppercase tracking-widest">{service?.nombre}</p>
-            <p className="text-sm font-semibold text-txt">{new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} a las {time}</p>
+            <p className="text-sm font-semibold text-txt">{new Date(date + 'T00:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} a las {time}</p>
           </div>
 
           {service && (
@@ -361,13 +357,7 @@ export default function BookingPage() {
                                      Cancelar WA
                                   </a>
 
-                                  {/* Simple direct Web cancel */}
-                                  <button 
-                                     onClick={() => handleCancelByClient(c.id!)}
-                                     className="px-2.5 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-widest bg-white/5 border border-white/10 text-muted hover:bg-danger hover:text-bg hover:border-danger transition-all shrink-0"
-                                  >
-                                     Cancelar Web
-                                  </button>
+
                                 </div>
                             )}
                          </div>

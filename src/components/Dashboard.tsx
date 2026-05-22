@@ -9,7 +9,7 @@ import {
   Clock
 } from 'lucide-react';
 import { AppData, User } from '../types';
-import { formatCurrency, cn } from '../utils';
+import { formatCurrency, cn, getBogotaDateString } from '../utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function Dashboard({ data, user, onTabChange }: { data: AppData, user: User, onTabChange: (tab: string) => void }) {
@@ -17,10 +17,7 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
   const [period, setPeriod] = React.useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
 
   const getLocalDateString = (d: Date = new Date()) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}`;
+    return getBogotaDateString(d);
   };
 
   const [startDate, setStartDate] = React.useState<string>(() => {
@@ -48,8 +45,7 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
     }
 
     const date = new Date(itemDate + 'T00:00:00');
-    const todayMidnight = new Date();
-    todayMidnight.setHours(0, 0, 0, 0);
+    const todayMidnight = new Date(getBogotaDateString() + 'T00:00:00');
 
     if (period === 'week') {
       const weekAgo = new Date(todayMidnight.getTime() - 7 * 24 * 60 * 60 * 1000);

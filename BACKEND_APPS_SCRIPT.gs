@@ -122,7 +122,11 @@ function getRows(sheet) {
         if (val instanceof Date) {
           // If year is < 1905, it represents a time-only cell (e.g. 1899-12-30)
           if (val.getFullYear() < 1905) {
-            obj[h] = Utilities.formatDate(val, tz, "HH:mm");
+            var hh = String(val.getHours());
+            if (hh.length < 2) hh = '0' + hh;
+            var mm = String(val.getMinutes());
+            if (mm.length < 2) mm = '0' + mm;
+            obj[h] = hh + ":" + mm;
           } else {
             // Check if it's date-only
             if (val.getHours() === 0 && val.getMinutes() === 0) {
@@ -450,7 +454,11 @@ function deleteAppointment(id) {
       
       var fmtHora = "";
       if (rawHora instanceof Date) {
-        fmtHora = Utilities.formatDate(rawHora, "America/Bogota", "HH:mm");
+        var rhh = String(rawHora.getHours());
+        if (rhh.length < 2) rhh = '0' + rhh;
+        var rmm = String(rawHora.getMinutes());
+        if (rmm.length < 2) rmm = '0' + rmm;
+        fmtHora = rhh + ":" + rmm;
       } else {
         fmtHora = String(rawHora || "").trim().substring(0, 5);
       }
