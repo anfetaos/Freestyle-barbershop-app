@@ -93,6 +93,14 @@ function getSheet(name) {
     }
   }
 
+  // Ensure "id" column is present in headers of "citas"
+  if (name == "citas" && !isEmpty) {
+    var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    if (headers.indexOf('id') === -1) {
+      sheet.getRange(1, headers.length + 1).setValue('id');
+    }
+  }
+
   // Mandatory check for users to ensure at least default accounts exist
   if (name == "usuarios") {
     var rows = sheet.getDataRange().getValues();
@@ -236,12 +244,10 @@ function saveAppointment(apt) {
   return true;
 }
 
-function editAppointment(id, apt) {
-  var sheet = getSheet("citas");
+function findAppointmentRowIndex(sheet, id) {
   var data = sheet.getDataRange().getValues();
   var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
   var idCol = headers.indexOf('id');
-  if (idCol === -1) idCol = 0; // Fallback to first column
   
   var fechaCol = headers.indexOf('fecha');
   var horaCol = headers.indexOf('hora');
@@ -263,18 +269,12 @@ function editAppointment(id, apt) {
   }
 
   for (var i = 1; i < data.length; i++) {
-    // 1. Match by Raw ID column
-    if (data[i][idCol] && String(data[i][idCol]).trim() === idStr) {
-      for (var key in apt) {
-        var col = headers.indexOf(key.toLowerCase());
-        if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
-      }
-      return true;
+    // 1. Match by Raw ID column (if idCol exists)
+    if (idCol > -1 && data[i][idCol] && String(data[i][idCol]).trim() === idStr) {
+      return i + 1; // 1-indexed row number
     }
-  }
-  
-  // 2. Fallback: Match by normalized date, time and client
-  for (var i = 1; i < data.length; i++) {
+    
+    // 2. Match by normalized composite parts
     var rawFecha = data[i][fechaCol];
     var rawHora = data[i][horaCol];
     var rawCliente = data[i][clienteCol];
@@ -282,7 +282,7 @@ function editAppointment(id, apt) {
     
     var fmtFecha = "";
     if (rawFecha instanceof Date) {
-      fmtFecha = Utilities.formatDate(rawFecha, Session.getScriptTimeZone() || "GMT", "yyyy-MM-dd");
+      fmtFecha = Utilities.formatDate(rawFecha, "America/Bogota", "yyyy-MM-dd");
     } else {
       fmtFecha = String(rawFecha || "").trim();
       if (fmtFecha.match(/^\d{4}-\d{2}-\d{2}T/)) {
@@ -292,7 +292,11 @@ function editAppointment(id, apt) {
     
     var fmtHora = "";
     if (rawHora instanceof Date) {
-      fmtHora = Utilities.formatDate(rawHora, Session.getScriptTimeZone() || "GMT", "HH:mm");
+      var rhh = String(rawHora.getHours());
+      if (rhh.length < 2) rhh = '0' + rhh;
+      var rmm = String(rawHora.getMinutes());
+      if (rmm.length < 2) rmm = '0' + rmm;
+      fmtHora = rhh + ":" + rmm;
     } else {
       fmtHora = String(rawHora || "").trim();
       if (fmtHora.match(/^\d{4}-\d{2}-\d{2}T/)) {
@@ -304,36 +308,39 @@ function editAppointment(id, apt) {
       }
     }
     
-    // Check various combinations
     var compositeIdPattern1 = fmtFecha + fmtHora + strCliente;
     var compositeIdPattern2 = fmtFecha + "_" + fmtHora + "_" + strCliente;
     var rawStringId = String(rawFecha) + String(rawHora) + String(rawCliente);
-    
-    var isMatch = false;
     
     if (compositeIdPattern1 === idStr || 
         compositeIdPattern2 === idStr || 
         rawStringId === idStr ||
         compositeIdPattern2.toLowerCase() === idStr.toLowerCase() ||
         compositeIdPattern1.toLowerCase() === idStr.toLowerCase()) {
-      isMatch = true;
+      return i + 1;
     } else if (hasParsedParts) {
-      // If we parsed YYYY-MM-DD_HH:MM_Cliente, do a direct normalized compare
       if (fmtFecha === parsedFecha && fmtHora === parsedHora && strCliente.toLowerCase() === parsedCliente) {
-        isMatch = true;
+        return i + 1;
       }
-    }
-    
-    if (isMatch) {
-      for (var key in apt) {
-        var col = headers.indexOf(key.toLowerCase());
-        if (col > -1) sheet.getRange(i + 1, col + 1).setValue(apt[key]);
-      }
-      return true;
     }
   }
+  return -1;
+}
+
+function editAppointment(id, apt) {
+  var sheet = getSheet("citas");
+  var rowIdx = findAppointmentRowIndex(sheet, id);
+  if (rowIdx === -1) {
+    throw new Error("Cita no encontrada: " + id);
+  }
   
-  throw new Error("Cita no encontrada");
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  for (var key in apt) {
+    var col = headers.indexOf(key.toLowerCase());
+    if (col > -1) sheet.getRange(rowIdx, col + 1).setValue(apt[key]);
+  }
+  return true;
 }
 
 function saveProduct(p) {
@@ -414,64 +421,10 @@ function updateConfig(configs) {
 
 function deleteAppointment(id) {
   var sheet = getSheet("citas");
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
-  var idCol = headers.indexOf('id');
-  if (idCol === -1) idCol = 0;
-  
-  var idStr = String(id || "").trim();
-  
-  // Try splitting for fallback representation
-  var parts = idStr.split('_');
-  var hasParsedParts = false;
-  var parsedFecha = "";
-  var parsedHora = "";
-  var parsedCliente = "";
-  if (parts.length >= 3 && parts[0].match(/^\d{4}-\d{2}-\d{2}$/) && parts[1].match(/^\d{2}:\d{2}$/)) {
-    hasParsedParts = true;
-    parsedFecha = parts[0];
-    parsedHora = parts[1];
-    parsedCliente = parts.slice(2).join('_').trim().toLowerCase();
+  var rowIdx = findAppointmentRowIndex(sheet, id);
+  if (rowIdx === -1) {
+    return false;
   }
-
-  for (var i = 1; i < data.length; i++) {
-    var rowId = data[i][idCol] ? String(data[i][idCol]).trim() : "";
-    var isMatch = false;
-    
-    if (rowId === idStr) {
-      isMatch = true;
-    } else if (hasParsedParts) {
-      var rawFecha = data[i][headers.indexOf('fecha')];
-      var rawHora = data[i][headers.indexOf('hora')];
-      var rawCliente = data[i][headers.indexOf('cliente')];
-      
-      var fmtFecha = "";
-      if (rawFecha instanceof Date) {
-        fmtFecha = Utilities.formatDate(rawFecha, "America/Bogota", "yyyy-MM-dd");
-      } else {
-        fmtFecha = String(rawFecha || "").trim();
-      }
-      
-      var fmtHora = "";
-      if (rawHora instanceof Date) {
-        var rhh = String(rawHora.getHours());
-        if (rhh.length < 2) rhh = '0' + rhh;
-        var rmm = String(rawHora.getMinutes());
-        if (rmm.length < 2) rmm = '0' + rmm;
-        fmtHora = rhh + ":" + rmm;
-      } else {
-        fmtHora = String(rawHora || "").trim().substring(0, 5);
-      }
-      
-      if (fmtFecha === parsedFecha && fmtHora === parsedHora && String(rawCliente || "").trim().toLowerCase() === parsedCliente) {
-        isMatch = true;
-      }
-    }
-    
-    if (isMatch) {
-      sheet.deleteRow(i + 1);
-      return true;
-    }
-  }
-  return false;
+  sheet.deleteRow(rowIdx);
+  return true;
 }

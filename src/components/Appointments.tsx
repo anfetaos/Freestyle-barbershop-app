@@ -10,7 +10,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   MoreVertical,
-  Check,
   X,
   History,
   Loader2,
@@ -336,15 +335,8 @@ export default function Appointments({ data, onRefresh, user, onInitiateCheckout
                   </div>
                   
                   <div className="flex gap-2">
-                     {cita.estado === 'pendiente' && (
+                     {(cita.estado === 'pendiente' || cita.estado === 'confirmada') && (
                        <>
-                         <button 
-                          onClick={() => updateStatus(cita.id!, 'confirmada')}
-                          className="p-1.5 rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-bg transition-all"
-                          title="Confirmar cita"
-                         >
-                           <Check size={16} />
-                         </button>
                          <button 
                           onClick={() => handleFinalize(cita)}
                           className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all flex items-center gap-1 px-2.5"
@@ -353,26 +345,14 @@ export default function Appointments({ data, onRefresh, user, onInitiateCheckout
                            <CheckSquare size={14} />
                            <span className="text-[10px] font-bold">COBRAR</span>
                          </button>
+                         <button 
+                          onClick={() => deleteCita(cita.id!)}
+                          className="p-1.5 rounded-lg bg-danger/10 text-danger hover:bg-danger hover:text-bg transition-all"
+                          title="Eliminar cita permanentemente y liberar espacio"
+                         >
+                           <X size={16} />
+                         </button>
                        </>
-                     )}
-                     {cita.estado === 'confirmada' && (
-                       <button 
-                        onClick={() => handleFinalize(cita)}
-                        className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all flex items-center gap-1 px-3"
-                        title="Cobrar servicio (Ir al carrito)"
-                       >
-                         <Check size={16} />
-                         <span className="text-[10px] font-bold">COBRAR</span>
-                       </button>
-                     )}
-                     {(cita.estado === 'pendiente' || cita.estado === 'confirmada') && (
-                       <button 
-                        onClick={() => deleteCita(cita.id!)}
-                        className="p-1.5 rounded-lg bg-danger/10 text-danger hover:bg-danger hover:text-bg transition-all"
-                        title="Eliminar cita permanentemente y liberar espacio"
-                       >
-                         <X size={16} />
-                       </button>
                      )}
                   </div>
                </div>
