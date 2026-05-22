@@ -19,6 +19,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [data, setData] = useState<AppData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkoutCart, setCheckoutCart] = useState<any[]>([]);
+  const [checkoutAppointmentId, setCheckoutAppointmentId] = useState<string | null>(null);
 
   // Check for public booking route
   const isBookingPage = 
@@ -64,8 +66,34 @@ export default function App() {
 
     switch (activeTab) {
       case 'dashboard': return <Dashboard data={data} user={user} onTabChange={setActiveTab} />;
-      case 'ventas': return <Sales data={data} onRefresh={loadData} user={user} onBack={() => setActiveTab('dashboard')} />;
-      case 'citas': return <Appointments data={data} onRefresh={loadData} user={user} />;
+      case 'ventas': 
+        return (
+          <Sales 
+            data={data} 
+            onRefresh={loadData} 
+            user={user} 
+            onBack={() => setActiveTab('dashboard')} 
+            preloadedCart={checkoutCart}
+            checkoutAppointmentId={checkoutAppointmentId}
+            onClearPreloadedCart={() => {
+              setCheckoutCart([]);
+              setCheckoutAppointmentId(null);
+            }}
+          />
+        );
+      case 'citas': 
+        return (
+          <Appointments 
+            data={data} 
+            onRefresh={loadData} 
+            user={user} 
+            onInitiateCheckout={(appointmentId, saleItems) => {
+              setCheckoutCart(saleItems);
+              setCheckoutAppointmentId(appointmentId);
+              setActiveTab('ventas');
+            }}
+          />
+        );
       case 'productos': return <Products data={data} onRefresh={loadData} isAdmin={user.role === 'owner'} />;
       case 'servicios': return <Services data={data} onRefresh={loadData} isAdmin={user.role === 'owner'} />;
       case 'usuarios': return <Users data={data} onRefresh={loadData} />;

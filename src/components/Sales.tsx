@@ -16,11 +16,34 @@ import { AppData, SaleItem, Service, Product, User } from '../types';
 import { formatCurrency, cn, getBogotaDateString } from '../utils';
 import { api } from '../api';
 
-export default function Sales({ data, onRefresh, user, onBack }: { data: AppData, onRefresh: () => void, user: User, onBack?: () => void }) {
-  const [cart, setCart] = useState<SaleItem[]>([]);
+export default function Sales({ 
+  data, 
+  onRefresh, 
+  user, 
+  onBack,
+  preloadedCart,
+  checkoutAppointmentId,
+  onClearPreloadedCart
+}: { 
+  data: AppData; 
+  onRefresh: () => void; 
+  user: User; 
+  onBack?: () => void;
+  preloadedCart?: SaleItem[];
+  checkoutAppointmentId?: string | null;
+  onClearPreloadedCart?: () => void;
+}) {
+  const [cart, setCart] = useState<SaleItem[]>(preloadedCart || []);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  // Sync state if preloadedCart is updated
+  React.useEffect(() => {
+    if (preloadedCart && preloadedCart.length > 0) {
+      setCart(preloadedCart);
+    }
+  }, [preloadedCart]);
 
   const total = cart.reduce((acc, item) => acc + (item.valor * item.cantidad), 0);
 
@@ -65,18 +88,30 @@ export default function Sales({ data, onRefresh, user, onBack }: { data: AppData
     if (cart.length === 0) return;
     setLoading(true);
     try {
-      // GAS should handle bulk sales or individual ones. We'll send the cart.
+      // 1. Save sale
       await api.saveSale({
         items: cart,
         usuario: user.usuario,
         fecha: getBogotaDateString(),
       });
+
+      // 2. Clear appointment if one was checked out
+      if (checkoutAppointmentId) {
+        await api.editAppointment(checkoutAppointmentId, { estado: 'finalizada' });
+      }
+
       setCart([]);
       setSuccess(true);
+      
+      if (onClearPreloadedCart) {
+        onClearPreloadedCart();
+      }
+
       setTimeout(() => setSuccess(false), 3000);
       onRefresh();
     } catch (err) {
       console.error(err);
+      alert('Error registrando la venta. Intente nuevamente.');
     } finally {
       setLoading(false);
     }
@@ -161,6 +196,23 @@ export default function Sales({ data, onRefresh, user, onBack }: { data: AppData
               Ref: {Math.random().toString(36).substr(2, 6).toUpperCase()}
             </span>
           </div>
+
+          {checkoutAppointmentId && (
+            <div className="bg-brand-blue/15 border-b border-brand-blue/30 px-4 py-2.5 flex items-center justify-between text-[10px] text-brand-blue font-bold tracking-wider">
+              <span className="flex items-center gap-1">
+                ⭐ COBRANDO CITA: {cart[0]?.clienteNombre ? cart[0].clienteNombre.toUpperCase() : 'CLIENTE'}
+              </span>
+              <button 
+                onClick={() => {
+                  if (onClearPreloadedCart) onClearPreloadedCart();
+                  setCart([]);
+                }}
+                className="text-danger hover:underline uppercase text-[9px] font-extrabold"
+              >
+                Limpiar Cita
+              </button>
+            </div>
+          )}
           
           <div className="p-0 max-h-[400px] overflow-y-auto">
             {cart.length > 0 ? (

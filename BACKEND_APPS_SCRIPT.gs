@@ -27,6 +27,9 @@ function doPost(e) {
       case 'editarCita':
         result = editAppointment(payload.id, payload.appointment);
         break;
+      case 'eliminarCita':
+        result = deleteAppointment(payload.id);
+        break;
       case 'guardarProducto':
         result = saveProduct(payload.product);
         break;
@@ -103,6 +106,8 @@ function getSheet(name) {
 }
 
 function getRows(sheet) {
+  var ss = sheet.getParent();
+  var tz = ss.getSpreadsheetTimeZone() || "America/Bogota";
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
   var headers = data.shift().map(function(h) { 
@@ -112,7 +117,24 @@ function getRows(sheet) {
   return data.map(function(row) {
     var obj = {};
     headers.forEach(function(h, i) {
-      if (h) obj[h] = row[i];
+      if (h) {
+        var val = row[i];
+        if (val instanceof Date) {
+          // If year is < 1905, it represents a time-only cell (e.g. 1899-12-30)
+          if (val.getFullYear() < 1905) {
+            obj[h] = Utilities.formatDate(val, tz, "HH:mm");
+          } else {
+            // Check if it's date-only
+            if (val.getHours() === 0 && val.getMinutes() === 0) {
+              obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd");
+            } else {
+              obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+            }
+          }
+        } else {
+          obj[h] = val;
+        }
+      }
     });
     return obj;
   });
@@ -384,4 +406,64 @@ function updateConfig(configs) {
     sheet.appendRow([c.key, c.value, c.tipo]);
   });
   return true;
+}
+
+function deleteAppointment(id) {
+  var sheet = getSheet("citas");
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+  var idCol = headers.indexOf('id');
+  if (idCol === -1) idCol = 0;
+  
+  var idStr = String(id || "").trim();
+  
+  // Try splitting for fallback representation
+  var parts = idStr.split('_');
+  var hasParsedParts = false;
+  var parsedFecha = "";
+  var parsedHora = "";
+  var parsedCliente = "";
+  if (parts.length >= 3 && parts[0].match(/^\d{4}-\d{2}-\d{2}$/) && parts[1].match(/^\d{2}:\d{2}$/)) {
+    hasParsedParts = true;
+    parsedFecha = parts[0];
+    parsedHora = parts[1];
+    parsedCliente = parts.slice(2).join('_').trim().toLowerCase();
+  }
+
+  for (var i = 1; i < data.length; i++) {
+    var rowId = data[i][idCol] ? String(data[i][idCol]).trim() : "";
+    var isMatch = false;
+    
+    if (rowId === idStr) {
+      isMatch = true;
+    } else if (hasParsedParts) {
+      var rawFecha = data[i][headers.indexOf('fecha')];
+      var rawHora = data[i][headers.indexOf('hora')];
+      var rawCliente = data[i][headers.indexOf('cliente')];
+      
+      var fmtFecha = "";
+      if (rawFecha instanceof Date) {
+        fmtFecha = Utilities.formatDate(rawFecha, "America/Bogota", "yyyy-MM-dd");
+      } else {
+        fmtFecha = String(rawFecha || "").trim();
+      }
+      
+      var fmtHora = "";
+      if (rawHora instanceof Date) {
+        fmtHora = Utilities.formatDate(rawHora, "America/Bogota", "HH:mm");
+      } else {
+        fmtHora = String(rawHora || "").trim().substring(0, 5);
+      }
+      
+      if (fmtFecha === parsedFecha && fmtHora === parsedHora && String(rawCliente || "").trim().toLowerCase() === parsedCliente) {
+        isMatch = true;
+      }
+    }
+    
+    if (isMatch) {
+      sheet.deleteRow(i + 1);
+      return true;
+    }
+  }
+  return false;
 }

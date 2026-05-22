@@ -13,14 +13,20 @@ import {
   Check,
   X,
   History,
-  Loader2
+  Loader2,
+  CheckSquare
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { AppData, Appointment, Service, User as BarberUser } from '../types';
 import { formatCurrency, cn, formatWhatsAppPhone, getBogotaDateString } from '../utils';
 import { api } from '../api';
 
-export default function Appointments({ data, onRefresh, user }: { data: AppData, onRefresh: () => void, user: BarberUser }) {
+export default function Appointments({ data, onRefresh, user, onInitiateCheckout }: { 
+  data: AppData, 
+  onRefresh: () => void, 
+  user: BarberUser,
+  onInitiateCheckout?: (appointmentId: string, saleItems: any[]) => void
+}) {
   const [selectedDate, setSelectedDate] = useState(getBogotaDateString());
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -83,31 +89,34 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
     }
   };
 
-  const handleFinalize = async (cita: Appointment) => {
+  const handleFinalize = (cita: Appointment) => {
+    const service = data.servicios.find(s => s.id === cita.servicio_id);
+    const saleItems = [{
+      id: cita.servicio_id,
+      nombre: cita.servicio,
+      tipo: 'servicio' as const,
+      valor: service?.precio || 0,
+      cantidad: 1,
+      comisionable: true,
+      clienteNombre: cita.cliente
+    }];
+
+    if (onInitiateCheckout) {
+      onInitiateCheckout(cita.id!, saleItems);
+    } else {
+      alert('Callback de cobro no configurado.');
+    }
+  };
+
+  const deleteCita = async (id: string) => {
+    if (!confirm('¿Estás seguro que deseas eliminar esta cita de la agenda? Se liberará el espacio y se borrará de forma permanente de Google Sheets.')) return;
     setLoading(true);
     try {
-      // 1. Mark as finalized
-      await api.editAppointment(cita.id!, { estado: 'finalizada' });
-      
-      // 2. Create a sale with items array as expected by GAS
-      const service = data.servicios.find(s => s.id === cita.servicio_id);
-      await api.saveSale({
-        fecha: getBogotaDateString(),
-        usuario: data.usuarios.find(u => u.nombre === cita.barbero)?.usuario || user.usuario,
-        items: [{
-          id: cita.servicio_id,
-          nombre: cita.servicio,
-          tipo: 'servicio',
-          valor: service?.precio || 0,
-          cantidad: 1,
-          comisionable: true
-        }]
-      });
-      
+      await api.deleteAppointment(id);
       onRefresh();
     } catch (err) {
       console.error(err);
-      alert('Error al cobrar el servicio');
+      alert('Error al eliminar la cita.');
     } finally {
       setLoading(false);
     }
@@ -328,18 +337,29 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                   
                   <div className="flex gap-2">
                      {cita.estado === 'pendiente' && (
-                       <button 
-                        onClick={() => updateStatus(cita.id!, 'confirmada')}
-                        className="p-1.5 rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-bg transition-all"
-                       >
-                         <Check size={16} />
-                       </button>
+                       <>
+                         <button 
+                          onClick={() => updateStatus(cita.id!, 'confirmada')}
+                          className="p-1.5 rounded-lg bg-brand-blue/10 text-brand-blue hover:bg-brand-blue hover:text-bg transition-all"
+                          title="Confirmar cita"
+                         >
+                           <Check size={16} />
+                         </button>
+                         <button 
+                          onClick={() => handleFinalize(cita)}
+                          className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all flex items-center gap-1 px-2.5"
+                          title="Cobrar servicio directamente (Ir al carrito)"
+                         >
+                           <CheckSquare size={14} />
+                           <span className="text-[10px] font-bold">COBRAR</span>
+                         </button>
+                       </>
                      )}
                      {cita.estado === 'confirmada' && (
                        <button 
                         onClick={() => handleFinalize(cita)}
                         className="p-1.5 rounded-lg bg-success/10 text-success hover:bg-success hover:text-bg transition-all flex items-center gap-1 px-3"
-                        title="Cobrar servicio"
+                        title="Cobrar servicio (Ir al carrito)"
                        >
                          <Check size={16} />
                          <span className="text-[10px] font-bold">COBRAR</span>
@@ -347,8 +367,9 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                      )}
                      {(cita.estado === 'pendiente' || cita.estado === 'confirmada') && (
                        <button 
-                        onClick={() => updateStatus(cita.id!, 'cancelada')}
+                        onClick={() => deleteCita(cita.id!)}
                         className="p-1.5 rounded-lg bg-danger/10 text-danger hover:bg-danger hover:text-bg transition-all"
+                        title="Eliminar cita permanentemente y liberar espacio"
                        >
                          <X size={16} />
                        </button>

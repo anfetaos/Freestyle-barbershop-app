@@ -165,6 +165,10 @@ export const api = {
     return gasFetch('editarCita', { id, appointment });
   },
   
+  deleteAppointment: async (id: string) => {
+    return gasFetch('eliminarCita', { id });
+  },
+  
   saveExpense: async (expense: any) => {
     return gasFetch('guardarGasto', { expense });
   },

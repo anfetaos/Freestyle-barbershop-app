@@ -64,12 +64,15 @@ export default function BookingPage() {
   const handleCancelByClient = async (id: string) => {
     if (!confirm('¿Estás seguro que deseas cancelar tu cita?')) return;
     try {
+      setSearching(true);
       await api.editAppointment(id, { estado: 'cancelada' });
       alert('Cita cancelada correctamente');
       handleSearch();
     } catch (err) {
       console.error(err);
-      alert('Error al cancelar la cita');
+      alert('Hubo un inconveniente al cancelar la cita automáticamente de la agenda. Por favor presiona la opción de "Cancelar (WhatsApp)" para informarle a tu barbero y liberar el espacio de inmediato.');
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -296,36 +299,81 @@ export default function BookingPage() {
              </div>
 
              <div className="space-y-4">
-                {myCitas.map(c => (
-                   <div key={c.id} className="glass-card p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all hover:border-white/20">
-                      <div>
-                         <p className="text-xs text-brand-gold font-bold uppercase tracking-widest mb-1">{c.servicio}</p>
-                         <p className="text-sm font-bold text-txt">{new Date(c.fecha).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-                         <div className="flex items-center gap-4 mt-1 text-[10px] text-muted font-bold uppercase">
-                            <span className="flex items-center gap-1"><Clock size={12}/> {c.hora}</span>
-                            <span className="flex items-center gap-1"><UserIcon size={12}/> {c.barbero}</span>
+                {myCitas.map(c => {
+                   const safeDate = new Date(c.fecha + 'T00:00:00');
+                   const formattedDate = !isNaN(safeDate.getTime()) 
+                      ? safeDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+                      : c.fecha;
+
+                   return (
+                      <div key={c.id} className="glass-card p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-all hover:border-white/20">
+                         <div>
+                            <p className="text-xs text-brand-gold font-bold uppercase tracking-widest mb-1">{c.servicio}</p>
+                            <p className="text-sm font-bold text-txt capitalize">{formattedDate}</p>
+                            <div className="flex items-center gap-4 mt-1 text-[10px] text-muted font-bold uppercase">
+                               <span className="flex items-center gap-1"><Clock size={12}/> {c.hora}</span>
+                               <span className="flex items-center gap-1"><UserIcon size={12}/> {c.barbero}</span>
+                            </div>
+                         </div>
+                         
+                         <div className="grid grid-cols-1 sm:flex items-center gap-3 w-full md:w-auto">
+                            <div className="flex items-center gap-2">
+                               <span className="text-[10px] text-muted font-bold uppercase">Estado:</span>
+                               <span className={cn(
+                                  "px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest",
+                                  c.estado === 'pendiente' ? "bg-brand-gold/20 text-brand-gold" :
+                                  c.estado === 'confirmada' ? "bg-brand-blue/20 text-brand-blue" :
+                                  "bg-success/20 text-success"
+                               )}>
+                                  {c.estado}
+                               </span>
+                            </div>
+                            
+                            {(c.estado === 'pendiente' || c.estado === 'confirmada') && (
+                               <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
+                                  {/* WhatsApp Confirm */}
+                                  <a 
+                                     href={(() => {
+                                        const shopWhatsApp = data?.config?.find(cfg => cfg.key === 'telefono' || cfg.key === 'whatsapp')?.value || '573224680553';
+                                        const phone = formatWhatsAppPhone(shopWhatsApp);
+                                        const msg = `Hola, quiero confirmar mi cita agendada para el ${formattedDate} a las ${c.hora} (${c.servicio}) con ${c.barbero}. ¡Nos vemos allá!`;
+                                        return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+                                     })()}
+                                     target="_blank"
+                                     rel="noreferrer"
+                                     className="px-2.5 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-widest bg-success/15 text-success border border-success/30 hover:bg-success hover:text-bg transition-all flex items-center gap-1 shrink-0"
+                                  >
+                                     Confirmar WA
+                                  </a>
+
+                                  {/* WhatsApp Cancel */}
+                                  <a 
+                                     href={(() => {
+                                        const shopWhatsApp = data?.config?.find(cfg => cfg.key === 'telefono' || cfg.key === 'whatsapp')?.value || '573224680553';
+                                        const phone = formatWhatsAppPhone(shopWhatsApp);
+                                        const msg = `Hola, necesito cancelar la cita que agendé para el ${formattedDate} a las ${c.hora} (${c.servicio}) con ${c.barbero}. Por favor liberen el espacio. ¡Gracias!`;
+                                        return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+                                     })()}
+                                     target="_blank"
+                                     rel="noreferrer"
+                                     className="px-2.5 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-widest bg-danger/15 text-danger border border-danger/30 hover:bg-danger hover:text-txt transition-all flex items-center gap-1 shrink-0"
+                                  >
+                                     Cancelar WA
+                                  </a>
+
+                                  {/* Simple direct Web cancel */}
+                                  <button 
+                                     onClick={() => handleCancelByClient(c.id!)}
+                                     className="px-2.5 py-1.5 rounded-lg text-[9px] font-extrabold uppercase tracking-widest bg-white/5 border border-white/10 text-muted hover:bg-danger hover:text-bg hover:border-danger transition-all shrink-0"
+                                  >
+                                     Cancelar Web
+                                  </button>
+                                </div>
+                            )}
                          </div>
                       </div>
-                      <div className="flex items-center gap-4 w-full sm:w-auto">
-                         <span className={cn(
-                            "px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest",
-                            c.estado === 'pendiente' ? "bg-brand-gold/20 text-brand-gold" :
-                            c.estado === 'confirmada' ? "bg-brand-blue/20 text-brand-blue" :
-                            "bg-success/20 text-success"
-                         )}>
-                            {c.estado}
-                         </span>
-                         {(c.estado === 'pendiente' || c.estado === 'confirmada') && (
-                            <button 
-                               onClick={() => handleCancelByClient(c.id!)}
-                               className="text-[10px] font-bold text-danger uppercase hover:underline"
-                            >
-                               Cancelar
-                            </button>
-                         )}
-                      </div>
-                   </div>
-                ))}
+                   );
+                })}
                 {myCitas.length === 0 && searchPhone && !searching && (
                    <div className="text-center py-12 text-muted uppercase text-[10px] font-bold tracking-widest italic opacity-50">
                       No se encontraron citas activas para este número
