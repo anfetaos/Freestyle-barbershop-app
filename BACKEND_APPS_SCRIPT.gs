@@ -113,35 +113,80 @@ function getSheet(name) {
   return sheet;
 }
 
+function normalizeTimeToHHMM(valStr) {
+  var str = String(valStr || "").trim();
+  if (!str) return "09:30";
+  
+  var match24 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24) {
+    var hh = parseInt(match24[1], 10);
+    var mm = parseInt(match24[2], 10);
+    var hStr = hh < 10 ? '0' + hh : String(hh);
+    var mStr = mm < 10 ? '0' + mm : String(mm);
+    return hStr + ":" + mStr;
+  }
+  
+  var match12 = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM|am|pm)$/i);
+  if (match12) {
+    var hh = parseInt(match12[1], 10);
+    var mm = parseInt(match12[2], 10);
+    var ampm = match12[3].toLowerCase();
+    
+    if (ampm === "pm" && hh < 12) {
+      hh += 12;
+    } else if (ampm === "am" && hh === 12) {
+      hh = 0;
+    }
+    
+    var hStr = hh < 10 ? '0' + hh : String(hh);
+    var mStr = mm < 10 ? '0' + mm : String(mm);
+    return hStr + ":" + mStr;
+  }
+  
+  if (str.indexOf('T') !== -1) {
+    var parts = str.split('T');
+    var timePart = parts[1] || "";
+    if (timePart.length >= 5) {
+      return timePart.substring(0, 5);
+    }
+  }
+  
+  var genericMatch = str.match(/^(\d{1,2}):(\d{2})/);
+  if (genericMatch) {
+    var hh = parseInt(genericMatch[1], 10);
+    var mm = parseInt(genericMatch[2], 10);
+    var hStr = hh < 10 ? '0' + hh : String(hh);
+    var mStr = mm < 10 ? '0' + mm : String(mm);
+    return hStr + ":" + mStr;
+  }
+  
+  return "09:30";
+}
+
 function getRows(sheet) {
   var ss = sheet.getParent();
   var tz = ss.getSpreadsheetTimeZone() || "America/Bogota";
   var data = sheet.getDataRange().getValues();
+  var displayData = sheet.getDataRange().getDisplayValues();
   if (data.length <= 1) return [];
   var headers = data.shift().map(function(h) { 
     return String(h).trim().toLowerCase(); 
   });
+  displayData.shift();
   
-  return data.map(function(row) {
+  return data.map(function(row, index) {
     var obj = {};
     headers.forEach(function(h, i) {
       if (h) {
         var val = row[i];
-        if (val instanceof Date) {
-          // If year is < 1905, it represents a time-only cell (e.g. 1899-12-30)
-          if (val.getFullYear() < 1905) {
-            var hh = String(val.getHours());
-            if (hh.length < 2) hh = '0' + hh;
-            var mm = String(val.getMinutes());
-            if (mm.length < 2) mm = '0' + mm;
-            obj[h] = hh + ":" + mm;
+        if (h === "hora") {
+          obj[h] = normalizeTimeToHHMM(displayData[index][i]);
+        } else if (val instanceof Date) {
+          // Check if it's date-only
+          if (val.getHours() === 0 && val.getMinutes() === 0) {
+            obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd");
           } else {
-            // Check if it's date-only
-            if (val.getHours() === 0 && val.getMinutes() === 0) {
-              obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd");
-            } else {
-              obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-            }
+            obj[h] = Utilities.formatDate(val, tz, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
           }
         } else {
           obj[h] = val;
@@ -246,6 +291,7 @@ function saveAppointment(apt) {
 
 function findAppointmentRowIndex(sheet, id) {
   var data = sheet.getDataRange().getValues();
+  var displayData = sheet.getDataRange().getDisplayValues();
   var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
   var idCol = headers.indexOf('id');
   
@@ -255,7 +301,6 @@ function findAppointmentRowIndex(sheet, id) {
   
   var idStr = String(id || "").trim();
   
-  // Try splitting by underscore for "YYYY-MM-DD_HH:MM_Cliente" format
   var parts = idStr.split('_');
   var hasParsedParts = false;
   var parsedFecha = "";
@@ -269,14 +314,11 @@ function findAppointmentRowIndex(sheet, id) {
   }
 
   for (var i = 1; i < data.length; i++) {
-    // 1. Match by Raw ID column (if idCol exists)
     if (idCol > -1 && data[i][idCol] && String(data[i][idCol]).trim() === idStr) {
-      return i + 1; // 1-indexed row number
+      return i + 1;
     }
     
-    // 2. Match by normalized composite parts
     var rawFecha = data[i][fechaCol];
-    var rawHora = data[i][horaCol];
     var rawCliente = data[i][clienteCol];
     var strCliente = String(rawCliente || "").trim();
     
@@ -290,27 +332,11 @@ function findAppointmentRowIndex(sheet, id) {
       }
     }
     
-    var fmtHora = "";
-    if (rawHora instanceof Date) {
-      var rhh = String(rawHora.getHours());
-      if (rhh.length < 2) rhh = '0' + rhh;
-      var rmm = String(rawHora.getMinutes());
-      if (rmm.length < 2) rmm = '0' + rmm;
-      fmtHora = rhh + ":" + rmm;
-    } else {
-      fmtHora = String(rawHora || "").trim();
-      if (fmtHora.match(/^\d{4}-\d{2}-\d{2}T/)) {
-        fmtHora = fmtHora.split('T')[1].substring(0, 5);
-      } else if (fmtHora.match(/^\d{2}:\d{2}$/)) {
-        // already HH:mm
-      } else if (fmtHora.match(/^\d{2}:\d{2}:\d{2}$/)) {
-        fmtHora = fmtHora.substring(0, 5);
-      }
-    }
+    var fmtHora = normalizeTimeToHHMM(displayData[i][horaCol]);
     
     var compositeIdPattern1 = fmtFecha + fmtHora + strCliente;
     var compositeIdPattern2 = fmtFecha + "_" + fmtHora + "_" + strCliente;
-    var rawStringId = String(rawFecha) + String(rawHora) + String(rawCliente);
+    var rawStringId = String(rawFecha) + String(displayData[i][horaCol]) + String(rawCliente);
     
     if (compositeIdPattern1 === idStr || 
         compositeIdPattern2 === idStr || 
