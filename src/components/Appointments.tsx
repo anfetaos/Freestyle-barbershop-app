@@ -28,7 +28,7 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
 
   const [newCita, setNewCita] = useState<Partial<Appointment>>({
     fecha: selectedDate,
-    hora: '09:00',
+    hora: '09:30',
     cliente: '',
     telefono: '',
     servicio_id: '',
@@ -272,9 +272,50 @@ export default function Appointments({ data, onRefresh, user }: { data: AppData,
                   <p className="text-txt font-bold text-sm sm:text-base flex items-center gap-2 uppercase tracking-wide truncate">
                     <UserIcon size={14} className="text-muted" /> {cita.cliente}
                   </p>
-                  <p className="text-[10px] sm:text-xs text-muted flex items-center gap-2 mt-1">
-                    <Phone size={10} /> {cita.telefono}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2.5 mt-1 pb-1">
+                    <span className="text-[10px] sm:text-xs text-muted flex items-center gap-1 bg-bg/85 border border-white/5 px-2 py-0.5 rounded">
+                      <Phone size={10} /> {cita.telefono}
+                    </span>
+                    {cita.telefono && (
+                      <div className="flex items-center gap-1.5">
+                        <a 
+                          href={(() => {
+                            const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
+                            const msg = `Hola ${cita.cliente}, te escribimos de *${shopName}* para confirmar tu cita del día *${cita.fecha}* a las *${cita.hora}* para el servicio de *${cita.servicio}* con el barbero *${cita.barbero}*. ¿Nos confirmas tu asistencia? 👍🏻`;
+                            let phone = cita.telefono.replace(/[^\d+]/g, '');
+                            if (phone.length === 10 && phone.startsWith('3')) {
+                              phone = '57' + phone;
+                            }
+                            return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+                          })()}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366] hover:text-bg px-2 py-0.5 rounded text-[8px] font-extrabold tracking-wide transition-all flex items-center gap-0.5 border border-[#25D366]/20 uppercase"
+                          title="Confirmar por WhatsApp con el cliente"
+                        >
+                          Confirmar WA
+                        </a>
+                        <a 
+                          href={(() => {
+                            const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
+                            const bookingUrl = window.location.href.split('#')[0].split('?')[0] + '#/reservar';
+                            const msg = `Hola ${cita.cliente}, te escribimos de *${shopName}* para informarte que tu cita programada del *${cita.fecha}* a las *${cita.hora}* ha sido cancelada. Si deseas reagendar, puedes ver los horarios disponibles aquí: ${bookingUrl}`;
+                            let phone = cita.telefono.replace(/[^\d+]/g, '');
+                            if (phone.length === 10 && phone.startsWith('3')) {
+                              phone = '57' + phone;
+                            }
+                            return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+                          })()}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="bg-danger/10 text-danger hover:bg-danger hover:text-bg px-2 py-0.5 rounded text-[8px] font-extrabold tracking-wide transition-all flex items-center gap-0.5 border border-danger/20 uppercase"
+                          title="Avisar cancelación por WhatsApp"
+                        >
+                          Avisar Cancelación
+                        </a>
+                      </div>
+                    )}
+                  </div>
                </div>
 
                <div>

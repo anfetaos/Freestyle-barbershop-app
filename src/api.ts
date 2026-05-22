@@ -121,7 +121,7 @@ export const api = {
         return {
           id: c.id || String(c.fecha) + String(c.hora) + String(c.cliente),
           fecha: normalizedDate,
-          hora: normalizedTime || '09:00',
+          hora: normalizedTime || '09:30',
           cliente: c.cliente || 'Sin nombre',
           telefono: c.telefono || '',
           servicio_id: c.servicio_id || '',

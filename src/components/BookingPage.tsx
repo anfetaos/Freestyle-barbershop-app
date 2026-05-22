@@ -82,11 +82,52 @@ export default function BookingPage() {
   const services = data?.servicios.filter(s => s.activo) || [];
 
   const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+    '09:30', '10:00', '10:30', '11:00', '11:30', 
     '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
     '15:00', '15:30', '16:00', '16:30', '17:00', '17:30',
     '18:00', '18:30', '19:00', '19:30'
   ];
+
+  // Helper to determine if a slot is busy on the selected date for the selected barber or overall
+  const getSlotStatus = (t: string) => {
+    if (!data?.citas) return { isBusy: false, reason: '' };
+    
+    // Find all active non-cancelled appointments at this exact date and hourly slot
+    const appointmentsOnSlot = data.citas.filter(c => 
+      c.fecha === date && 
+      c.hora === t && 
+      c.estado !== 'cancelada'
+    );
+    
+    if (barber === 'Cualquier barbero') {
+      // If client chose "Any barber", it represents a full block only if all active barbers are busy
+      if (appointmentsOnSlot.length >= barbers.length) {
+        return { isBusy: true, reason: 'Todos ocupados' };
+      }
+      return { isBusy: false, reason: '' };
+    } else {
+      // If a specific barber is chosen:
+      // It is busy if that barber already has an appointment, or if overall slots are full
+      const hasSpecificBooking = appointmentsOnSlot.some(c => c.barbero === barber);
+      if (hasSpecificBooking) {
+        return { isBusy: true, reason: 'Ocupado' };
+      }
+      if (appointmentsOnSlot.length >= barbers.length) {
+        return { isBusy: true, reason: 'Lleno' };
+      }
+      return { isBusy: false, reason: '' };
+    }
+  };
+
+  // Safe lock state: reset chosen time if it becomes busy or occupied on a barber/date change
+  useEffect(() => {
+    if (time) {
+      const { isBusy } = getSlotStatus(time);
+      if (isBusy) {
+        setTime('');
+      }
+    }
+  }, [barber, date]);
 
   const handleBooking = async () => {
     if (!service || !date || !time || !customer.nombre || !customer.telefono) return;
@@ -137,9 +178,38 @@ export default function BookingPage() {
             <p className="text-xs text-brand-gold font-bold uppercase tracking-widest">{service?.nombre}</p>
             <p className="text-sm font-semibold text-txt">{new Date(date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })} a las {time}</p>
           </div>
+
+          {service && (
+            <a 
+              href={(() => {
+                const shopWhatsApp = data?.config?.find(c => c.key === 'whatsapp')?.value || '';
+                const shopName = data?.config?.find(c => c.key === 'nombre_barberia')?.value || 'Freestyle Urban Grooming';
+                const msg = `Hola, acabo de agendar mi cita por la web:\n\n` +
+                  `✂️ *Servicio:* ${service.nombre}\n` +
+                  `📅 *Fecha:* ${date}\n` +
+                  `⏰ *Hora:* ${time}\n` +
+                  `💈 *Barbero:* ${barber}\n` +
+                  `👤 *Cliente:* ${customer.nombre}\n` +
+                  `📱 *Teléfono:* ${customer.telefono}\n\n` +
+                  `Por favor confirmen mi reserva. ¡Muchas gracias!`;
+                
+                let phone = shopWhatsApp.replace(/[^\d+]/g, '');
+                if (phone.length === 10 && phone.startsWith('3')) {
+                  phone = '57' + phone;
+                }
+                return `https://wa.me/${phone || '573000000000'}?text=${encodeURIComponent(msg)}`;
+              })()}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-[#25D366] hover:bg-[#20BA56] text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all my-4 inline-flex shadow-lg"
+            >
+              <Smartphone size={18} /> CONFIRMAR CITA POR WHATSAPP
+            </a>
+          )}
+
           <button 
             onClick={() => window.location.reload()}
-            className="w-full btn-primary py-4"
+            className="w-full btn-primary py-4 mt-2"
           >
             Agendar otra cita
           </button>
@@ -339,19 +409,32 @@ export default function BookingPage() {
                         onChange={(e) => setDate(e.target.value)}
                         className="w-full bg-d1 border border-white/5 rounded-xl p-4 text-txt outline-none focus:border-brand-blue/50 transition-all font-bold"
                     />
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {timeSlots.map(t => (
-                            <button
-                                key={t}
-                                onClick={() => setTime(t)}
-                                className={cn(
-                                    "py-3 rounded-lg border text-xs font-mono font-bold transition-all",
-                                    time === t ? "bg-brand-gold text-bg border-brand-gold" : "bg-d1 border-white/5 text-muted hover:border-brand-gold/30"
-                                )}
-                            >
-                                {t}
-                            </button>
-                        ))}
+                    <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 gap-2.5">
+                        {timeSlots.map(t => {
+                            const { isBusy } = getSlotStatus(t);
+                            return (
+                                <button
+                                    key={t}
+                                    disabled={isBusy}
+                                    onClick={() => setTime(t)}
+                                    className={cn(
+                                        "py-3.5 rounded-xl border text-xs font-mono font-bold transition-all flex flex-col items-center justify-center gap-1 relative overflow-hidden",
+                                        isBusy 
+                                            ? "bg-danger/5 border-danger/20 text-muted/40 cursor-not-allowed opacity-40 line-through" 
+                                            : time === t 
+                                                ? "bg-brand-gold text-bg border-brand-gold shadow-xs" 
+                                                : "bg-d1 border-white/5 text-muted hover:border-brand-gold/30"
+                                    )}
+                                >
+                                    <span>{t}</span>
+                                    {isBusy && (
+                                      <span className="block text-[8px] font-sans tracking-wide uppercase font-black text-danger leading-none no-underline">
+                                        Ocupado
+                                      </span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
