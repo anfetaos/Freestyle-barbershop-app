@@ -1,7 +1,25 @@
 import { AppData, User } from './types';
 import { parseFechaBogota, parseHoraBogota } from './utils';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyVXijFTgUwIKKA9wxCoQ-McPeu3oSw2tzIKNmaliLDkmhY0RCHKbSqKA5Tj_TRjO3D6A/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbyVXijFTgUwIKKA9wxCoQ-McPeu3oSw2tzIKNmaliLDkmhY0RCHKbSqKA5Tj_TRjO3D6A/exec';
+
+export const getGasUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('CUSTOM_GAS_URL') || DEFAULT_GAS_URL;
+  }
+  return DEFAULT_GAS_URL;
+};
+
+export const setGasUrl = (url: string) => {
+  if (typeof window !== 'undefined') {
+    const trimmed = url.trim();
+    if (trimmed) {
+      localStorage.setItem('CUSTOM_GAS_URL', trimmed);
+    } else {
+      localStorage.removeItem('CUSTOM_GAS_URL');
+    }
+  }
+};
 
 /**
  * Enhanced fetch for Google Apps Script
@@ -9,8 +27,9 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbyVXijFTgUwIKKA9wxCoQ-M
  */
 const gasFetch = async (action: string, payload: any = {}) => {
   try {
-    console.log(`[API Request] ${action}`, payload);
-    const response = await fetch(GAS_URL, {
+    const url = getGasUrl();
+    console.log(`[API Request] ${action} to ${url}`, payload);
+    const response = await fetch(url, {
       method: "POST",
       mode: "cors",
       headers: {

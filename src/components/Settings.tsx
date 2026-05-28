@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Save, LogOut, Settings as SettingsIcon, Globe, Instagram, MessageSquare, CreditCard, Percent, Loader2, Share2, Clipboard } from 'lucide-react';
+import { Save, LogOut, Settings as SettingsIcon, Globe, Instagram, MessageSquare, CreditCard, Percent, Loader2, Share2, Clipboard, Server } from 'lucide-react';
 import { AppData, Config } from '../types';
-import { api } from '../api';
+import { api, getGasUrl, setGasUrl } from '../api';
 
 export default function Settings({ data, onRefresh }: { data: AppData, onRefresh: () => void }) {
   const [loading, setLoading] = useState(false);
+  const [customGasUrl, setCustomGasUrl] = useState(() => getGasUrl());
   
   // Define expected configuration keys
   const defaultKeys = [
@@ -33,6 +34,7 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
   const handleSave = async () => {
     setLoading(true);
     try {
+      setGasUrl(customGasUrl);
       await api.updateConfig(configs);
       onRefresh();
       alert('Configuración actualizada');
@@ -130,6 +132,47 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
                   </div>
                 );
               })}
+        </div>
+      </div>
+
+      {/* Google Apps Script Backend Connection card */}
+      <div className="glass-card p-8 border-brand-gold/30 bg-brand-gold/5">
+        <h3 className="text-lg font-bold text-txt mb-4 flex items-center gap-2 uppercase tracking-tighter">
+          <Server size={20} className="text-brand-gold" /> Conexión con Google Sheets (Backend)
+        </h3>
+        <p className="text-xs text-muted mb-6">
+          La base de datos de esta aplicación está en Google Sheets mediante un script de Google Apps Script. 
+          Si hiciste cambios en el código de tu Apps Script y creaste una nueva implementación o cambiaste de hoja, pega aquí la nueva <b>URL de Web App</b>.
+        </p>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[10px] uppercase font-bold text-muted mb-2 tracking-widest">URL de Web App (Google Apps Script)</label>
+            <input 
+              type="text" 
+              value={customGasUrl}
+              onChange={(e) => setCustomGasUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/.../exec"
+              className="w-full bg-bg border border-white/10 rounded-lg px-4 py-2.5 text-xs text-txt outline-none focus:border-brand-blue font-mono text-brand-gold"
+            />
+          </div>
+          <div className="p-4 bg-bg/50 border border-white/5 rounded-xl text-xs leading-relaxed text-muted space-y-2">
+            <p>
+              💡 <b>¿Por qué sale el error "Acción no reconocida"?</b><br />
+              Google Apps Script de manera predeterminada ejecuta la foto de código (versión snapshot) que estaba guardada cuando realizaste la implementación. 
+              Si editas el script (por ejemplo, para agregar <code>guardarGasto</code> o <code>guardarAdelanto</code>):
+            </p>
+            <ol className="list-decimal list-inside space-y-1 ml-1 font-semibold text-txt">
+              <li>Haz clic en <b>"Implementar" (Deploy)</b> en el editor de Apps Script.</li>
+              <li>Selecciona <b>"Administrar implementaciones" (Manage deployments)</b>.</li>
+              <li>Haz clic en el lápiz para <b>editar</b> la implementación activa de tipo "Aplicación web" (Web App).</li>
+              <li>En "Versión" (Version), selecciona obligatoriamente <b>"Nueva versión" (New version)</b>.</li>
+              <li>Haz clic en <b>"Implementar" (Deploy)</b> y asegúrate de copiar la URL generada.</li>
+            </ol>
+            <p className="pt-1 text-[11px]">
+              Una vez implementada la nueva versión, pega la URL arriba y haz clic en "Guardar Cambios".
+            </p>
+          </div>
         </div>
       </div>
 
