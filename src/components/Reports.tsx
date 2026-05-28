@@ -9,7 +9,8 @@ import {
   CheckCircle2, 
   ArrowUpRight,
   Sparkles,
-  Calendar
+  Calendar,
+  Coins
 } from 'lucide-react';
 import { AppData, User } from '../types';
 import { formatCurrency, cn, getBogotaDateString } from '../utils';
@@ -165,7 +166,8 @@ export default function Reports({
     const periodExpenses = getFilteredExpenses();
     periodExpenses.forEach(g => {
       const isComisionGasto = g.categoria?.toLowerCase?.().trim?.() === 'comisión' || g.categoria === 'Comisión';
-      if (isComisionGasto) {
+      const isAdelantoGasto = g.categoria?.toLowerCase?.().trim?.() === 'adelanto' || g.categoria?.toLowerCase?.().trim?.() === 'anticipo' || g.categoria === 'Adelanto';
+      if (isComisionGasto || isAdelantoGasto) {
         // Find which barber u was paid
         const u = data.usuarios.find(user => 
           user.usuario?.toLowerCase().trim() === g.usuario?.toLowerCase().trim() ||
@@ -179,6 +181,36 @@ export default function Reports({
       }
     });
 
+    // Calculate advances already given/approved in the filtered range, which count as prepayments
+    const periodAdelantos = (data.adelantos || []).filter(a => {
+      const todayStr = getLocalDateString();
+      let matchesPeriod = false;
+      if (filter === 'hoy') {
+        matchesPeriod = a.fecha === todayStr;
+      } else if (filter === 'semana') {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        const limit = getLocalDateString(d);
+        matchesPeriod = a.fecha >= limit;
+      } else if (filter === 'mes') {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        const limit = getLocalDateString(d);
+        matchesPeriod = a.fecha >= limit;
+      } else if (filter === 'rango') {
+        matchesPeriod = (!startDate || a.fecha >= startDate) && (!endDate || a.fecha <= endDate);
+      } else {
+        matchesPeriod = true; // historico
+      }
+      return matchesPeriod && a.estado === 'aprobado';
+    });
+
+    periodAdelantos.forEach(a => {
+      if (payouts[a.usuario]) {
+        payouts[a.usuario].commissionPaid += Number(a.monto || 0); // Disminuye la comisión por pagar!
+      }
+    });
+
     // Calculate remaining pending balance
     Object.keys(payouts).forEach(key => {
       payouts[key].pending = Math.max(0, payouts[key].commissionEarned - payouts[key].commissionPaid);
@@ -189,7 +221,76 @@ export default function Reports({
 
   const barberPayouts = getBarberPayouts();
   const totalBarberCommissions = barberPayouts.reduce((acc, p) => acc + p.commissionEarned, 0);
-  const netOperatingProfit = totalSales - totalExpenses - totalBarberCommissions;
+
+  // Operational expenses are regular costs (rent, services, tools/supplies). Exclude commissions, utilities, and advances.
+  const operationalExpensesList = expenses.filter(g => {
+    const cat = g.categoria?.toLowerCase?.() || '';
+    return cat !== 'comisión' && cat !== 'utilidades' && cat !== 'conisión' && cat !== 'adelanto' && cat !== 'anticipo';
+  });
+  const totalOperationalExpenses = operationalExpensesList.reduce((acc, g) => acc + g.monto, 0);
+
+  // Utilidad Generada (Ventas - Gastos Fijos/Insumos - Comisiones Barberos)
+  const utilidadGenerada = totalSales - totalOperationalExpenses - totalBarberCommissions;
+
+  // Let's find already paid/withdrawn utilities in the selected period (expenses with category 'Utilidades' or 'Retiro de Utilidades')
+  const utilidadesRetiradasList = expenses.filter(g => {
+    const cat = g.categoria?.toLowerCase?.() || '';
+    return cat === 'utilidades' || cat === 'retiro de utilidades' || cat === 'utilidad';
+  });
+  const totalUtilidadesRetiradas = utilidadesRetiradasList.reduce((acc, g) => acc + g.monto, 0);
+
+  // Available utilities left to pay/withdraw
+  const utilidadPendiente = Math.max(0, utilidadGenerada - totalUtilidadesRetiradas);
+  
+  // Keep original variable name for retro-compatibility
+  const netOperatingProfit = utilidadGenerada;
+
+  // Owner utility states
+  const [withdrawingUtilities, setWithdrawingUtilities] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawDescription, setWithdrawDescription] = useState('');
+  const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
+
+  const handleWithdrawUtilities = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = Number(withdrawAmount);
+    if (!amountNum || amountNum <= 0) {
+      alert('Por favor ingrese un monto válido de utilidades.');
+      return;
+    }
+    if (amountNum > utilidadPendiente) {
+      if (!window.confirm(`El monto a retirar (${formatCurrency(amountNum)}) supera la utilidad disponible (${formatCurrency(utilidadPendiente)}). ¿Desea continuar de todos modos?`)) {
+        return;
+      }
+    } else {
+      if (!window.confirm(`¿Confirmar retiro/pago de utilidades por un valor de ${formatCurrency(amountNum)}?`)) {
+        return;
+      }
+    }
+
+    setSubmittingWithdraw(true);
+    try {
+      const todayStr = getLocalDateString();
+      const expense = {
+        fecha: todayStr,
+        categoria: 'Utilidades',
+        descripcion: withdrawDescription || `Pago de Utilidades / Retiro de Socios`,
+        monto: amountNum,
+        usuario: user.usuario
+      };
+
+      await api.saveExpense(expense);
+      setWithdrawAmount('');
+      setWithdrawDescription('');
+      setWithdrawingUtilities(false);
+      if (onRefresh) onRefresh();
+      alert('Retiro/Pago de utilidades registrado con éxito como egreso del negocio.');
+    } catch (err: any) {
+      alert('Error al registrar retiro de utilidades: ' + (err.message || err));
+    } finally {
+      setSubmittingWithdraw(false);
+    }
+  };
 
   // Handle registering commission payment as an official Gasto
   const handlePayCommission = async (payout: any) => {
@@ -318,10 +419,10 @@ export default function Reports({
             <div className="p-2 bg-danger/10 text-danger rounded-lg">
               <Wallet size={16} />
             </div>
-            <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest">Gastos Directos</span>
+            <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest">Gastos Directos (Costos)</span>
           </div>
-          <p className="text-2xl font-black text-txt font-mono">{formatCurrency(totalExpenses)}</p>
-          <p className="text-[9px] text-muted font-bold mt-1.5 uppercase">Insumos y Operativos registrados</p>
+          <p className="text-2xl font-black text-txt font-mono">{formatCurrency(totalOperationalExpenses)}</p>
+          <p className="text-[9px] text-muted font-bold mt-1.5 uppercase">Arriendo, Servicios e Insumos</p>
         </div>
 
         <div className="bg-d1 border-l-4 border-l-success border border-d3 rounded-xl p-5 shadow-sm sm:col-span-2 lg:col-span-1">
@@ -331,8 +432,8 @@ export default function Reports({
             </div>
             <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest">Utilidad Operativa</span>
           </div>
-          <p className="text-2xl font-black text-txt font-mono">{formatCurrency(netOperatingProfit)}</p>
-          <p className="text-[9px] text-muted font-bold mt-1.5 uppercase">Fórmula: Ventas - Gastos - Comisiones</p>
+          <p className="text-2xl font-black text-txt font-mono">{formatCurrency(utilidadGenerada)}</p>
+          <p className="text-[9px] text-muted font-bold mt-1.5 uppercase">Fórmula: Ventas - Costos - Comisiones</p>
         </div>
       </div>
 
@@ -424,16 +525,86 @@ export default function Reports({
               <h4 className="text-xs font-bold text-brand-gold uppercase flex items-center gap-1.5">
                 <Sparkles size={14} className="text-brand-gold" /> Distribución de Utilidad
               </h4>
-              <div className="flex items-center justify-between p-5 bg-brand-gold/5 rounded-2xl border border-brand-gold/20">
-                <div>
-                  <p className="text-sm font-black text-txt uppercase tracking-tight">Utilidad Neta</p>
-                  <p className="text-[10px] text-muted font-semibold uppercase mt-0.5">(Ventas - Gastos - Comisiones)</p>
+              
+              {/* Desglose de Utilidades */}
+              <div className="p-5 bg-d2 border border-d3 rounded-xl space-y-4 shadow-inner">
+                <div className="flex justify-between items-center text-xs pb-2.5 border-b border-d3/40">
+                  <span className="text-muted font-bold uppercase tracking-wider">Utilidad Generada (Bruta):</span>
+                  <span className="text-txt font-bold font-mono text-sm">{formatCurrency(utilidadGenerada)}</span>
                 </div>
-                <span className="text-xl font-mono font-black text-brand-gold">{formatCurrency(netOperatingProfit)}</span>
+                <div className="flex justify-between items-center text-xs pb-2.5 border-b border-d3/40">
+                  <span className="text-muted font-bold uppercase tracking-wider">Utilidades Retiradas/Pagadas:</span>
+                  <span className="text-danger font-bold font-mono text-sm">-{formatCurrency(totalUtilidadesRetiradas)}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-brand-gold/10 border border-brand-gold/25 rounded-lg">
+                  <div>
+                    <span className="text-brand-gold font-bold uppercase tracking-widest text-[9px] block">Disponible para Socios:</span>
+                    <span className="text-[9px] text-muted font-medium block">Ventas - Costos - Comisiones - Retiros</span>
+                  </div>
+                  <span className="text-lg font-black font-mono text-brand-gold">{formatCurrency(utilidadPendiente)}</span>
+                </div>
+
+                {/* Botón e Inline Form para Retirar / Registrar pago de Utilidades */}
+                {withdrawingUtilities ? (
+                  <form onSubmit={handleWithdrawUtilities} className="p-3 bg-bg/60 border border-brand-gold/20 rounded-lg space-y-3 mt-3">
+                    <span className="text-[10px] font-black uppercase text-brand-gold block">Registrar Retiro de Utilidad</span>
+                    <div className="space-y-2">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-bold text-muted">Monto (COP)</label>
+                        <input
+                          type="number"
+                          value={withdrawAmount}
+                          onChange={(e) => setWithdrawAmount(e.target.value)}
+                          placeholder="Monto a retirar"
+                          required
+                          className="bg-bg border border-d3 rounded px-2.5 py-1.5 text-xs text-txt font-bold outline-none focus:border-brand-gold"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[9px] uppercase font-bold text-muted">Nota/Descripción</label>
+                        <input
+                          type="text"
+                          value={withdrawDescription}
+                          onChange={(e) => setWithdrawDescription(e.target.value)}
+                          placeholder="P. ej., Retiro de utilidades Mayo - Socio X"
+                          className="bg-bg border border-d3 rounded px-2.5 py-1.5 text-xs text-txt font-medium outline-none focus:border-brand-gold"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawingUtilities(false)}
+                        className="bg-d3/80 hover:bg-d3 text-muted px-3 py-1.5 rounded text-[9px] font-bold uppercase"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submittingWithdraw}
+                        className="bg-brand-gold text-bg font-black uppercase text-[9px] px-3 py-1.5 rounded hover:bg-[#ffdf66] transition-all flex items-center gap-1"
+                      >
+                        {submittingWithdraw && <Loader2 className="animate-spin" size={10} />}
+                        Registrar Egreso
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setWithdrawAmount(Math.round(utilidadPendiente).toString());
+                      setWithdrawingUtilities(true);
+                    }}
+                    className="w-full bg-brand-gold hover:bg-[#ffdf66] text-bg py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-lg shadow-brand-gold/10"
+                  >
+                    <Coins size={12} /> Registrar Retiro / Pago de Utilidad
+                  </button>
+                )}
               </div>
+
               <div className="p-5 bg-d2 border border-d3 rounded-xl space-y-4">
                 <p className="text-[9px] text-muted uppercase font-black tracking-widest border-b border-d3/50 pb-2">
-                  Reparto Equitativo Socios (Propietarios)
+                  Reparto Equitativo de Utilidad Disponible
                 </p>
                 
                 {owners.length > 0 ? (
@@ -447,8 +618,8 @@ export default function Reports({
                           <span className="text-txt font-black uppercase tracking-wide">{ow.nombre}</span>
                         </div>
                         <div className="text-right">
-                          <span className="text-[8px] text-muted block font-semibold uppercase tracking-wider">Porcentaje ({(100 / owners.length).toFixed(0)}%)</span>
-                          <span className="text-brand-gold font-mono font-black text-sm">{formatCurrency(netOperatingProfit / owners.length)}</span>
+                          <span className="text-[8px] text-muted block font-semibold uppercase tracking-wider">Socio Propietario ({(100 / owners.length).toFixed(0)}%)</span>
+                          <span className="text-brand-gold font-mono font-black text-sm">{formatCurrency(utilidadPendiente / owners.length)}</span>
                         </div>
                       </div>
                     ))}
@@ -462,7 +633,7 @@ export default function Reports({
                       </div>
                       <div className="text-right">
                         <span className="text-[8px] text-muted block font-semibold uppercase">Porcentaje (50%)</span>
-                        <span className="text-txt font-mono font-black">{formatCurrency(netOperatingProfit * 0.5)}</span>
+                        <span className="text-brand-gold font-mono font-black">{formatCurrency(utilidadPendiente * 0.5)}</span>
                       </div>
                     </div>
                     <div className="flex justify-between items-center text-xs font-bold p-3 bg-bg/40 rounded-lg border border-d3/30">
@@ -471,7 +642,7 @@ export default function Reports({
                       </div>
                       <div className="text-right">
                         <span className="text-[8px] text-muted block font-semibold uppercase">Porcentaje (50%)</span>
-                        <span className="text-txt font-mono font-black">{formatCurrency(netOperatingProfit * 0.5)}</span>
+                        <span className="text-brand-gold font-mono font-black">{formatCurrency(utilidadPendiente * 0.5)}</span>
                       </div>
                     </div>
                   </div>

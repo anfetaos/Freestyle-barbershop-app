@@ -65,7 +65,7 @@ export default function App() {
     if (!data) return null;
 
     switch (activeTab) {
-      case 'dashboard': return <Dashboard data={data} user={user} onTabChange={setActiveTab} />;
+      case 'dashboard': return <Dashboard data={data} user={user} onTabChange={setActiveTab} onRefresh={loadData} />;
       case 'ventas': 
         return (
           <Sales 
@@ -99,7 +99,7 @@ export default function App() {
       case 'usuarios': return <Users data={data} onRefresh={loadData} />;
       case 'reportes': return <Reports data={data} user={user} onRefresh={loadData} />;
       case 'config': return <Settings data={data} onRefresh={loadData} />;
-      default: return <Dashboard data={data} user={user} onTabChange={setActiveTab} />;
+      default: return <Dashboard data={data} user={user} onTabChange={setActiveTab} onRefresh={loadData} />;
     }
   };
 

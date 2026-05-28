@@ -72,6 +72,17 @@ export interface Expense {
   usuario: string;
 }
 
+export interface Adelanto {
+  id: string;
+  fecha: string;
+  usuario: string;
+  nombre: string;
+  monto: number;
+  tipo: 'dia' | 'semana';
+  motivo: string;
+  estado: 'pendiente' | 'aprobado' | 'rechazado';
+}
+
 export interface Config {
   key: string;
   value: string;
@@ -86,4 +97,5 @@ export interface AppData {
   citas: Appointment[];
   gastos: Expense[];
   config: Config[];
+  adelantos: Adelanto[];
 }

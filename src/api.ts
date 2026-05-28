@@ -58,7 +58,7 @@ export const api = {
   
   loadAllData: async (): Promise<AppData> => {
     const data = await gasFetch('loadAllData');
-    if (!data) return { usuarios: [], servicios: [], productos: [], ventas: [], citas: [], gastos: [], config: [] };
+    if (!data) return { usuarios: [], servicios: [], productos: [], ventas: [], citas: [], gastos: [], config: [], adelantos: [] };
     
     // Normalize usuarios
     if (data.usuarios && Array.isArray(data.usuarios)) {
@@ -111,6 +111,22 @@ export const api = {
         fecha: parseFechaBogota(g.fecha),
         monto: Number(g.monto || 0)
       }));
+    }
+    
+    if (data.adelantos && Array.isArray(data.adelantos)) {
+      data.adelantos = data.adelantos.map((a: any) => ({
+        ...a,
+        id: String(a.id || ''),
+        fecha: parseFechaBogota(a.fecha),
+        usuario: String(a.usuario || '').trim(),
+        nombre: String(a.nombre || '').trim(),
+        monto: Number(a.monto || 0),
+        tipo: String(a.tipo || 'dia').toLowerCase().trim() as any,
+        motivo: String(a.motivo || '').trim(),
+        estado: String(a.estado || 'pendiente').toLowerCase().trim() as any
+      }));
+    } else {
+      data.adelantos = [];
     }
     
     return data;
@@ -171,6 +187,14 @@ export const api = {
   
   saveExpense: async (expense: any) => {
     return gasFetch('guardarGasto', { expense });
+  },
+  
+  saveAdelanto: async (adelanto: any) => {
+    return gasFetch('guardarAdelanto', { adelanto });
+  },
+  
+  editAdelanto: async (id: string, adelanto: any) => {
+    return gasFetch('editarAdelanto', { id, adelanto });
   },
   
   updateConfig: async (config: any) => {

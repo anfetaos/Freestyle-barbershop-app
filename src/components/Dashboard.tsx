@@ -6,13 +6,29 @@ import {
   ShoppingBag, 
   ArrowUpRight, 
   ArrowDownRight,
-  Clock
+  Clock,
+  Check,
+  X,
+  Coins,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { AppData, User } from '../types';
 import { formatCurrency, cn, getBogotaDateString } from '../utils';
+import { api } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-export default function Dashboard({ data, user, onTabChange }: { data: AppData, user: User, onTabChange: (tab: string) => void }) {
+export default function Dashboard({ 
+  data, 
+  user, 
+  onTabChange, 
+  onRefresh 
+}: { 
+  data: AppData; 
+  user: User; 
+  onTabChange: (tab: string) => void; 
+  onRefresh?: () => void; 
+}) {
   const isOwner = user.role === 'owner';
   const [period, setPeriod] = React.useState<'day' | 'week' | 'month' | 'year' | 'custom'>('week');
 
@@ -29,6 +45,92 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
   const [endDate, setEndDate] = React.useState<string>(() => {
     return getLocalDateString();
   });
+
+  const [processingAdvanceId, setProcessingAdvanceId] = React.useState<string | null>(null);
+  
+  // Barber states
+  const [isRequestingAdvance, setIsRequestingAdvance] = React.useState(false);
+  const [advanceAmount, setAdvanceAmount] = React.useState('');
+  const [advanceType, setAdvanceType] = React.useState<'dia' | 'semana'>('dia');
+  const [advanceReason, setAdvanceReason] = React.useState('');
+  const [submittingAdvance, setSubmittingAdvance] = React.useState(false);
+
+  const handleApproveAdvance = async (a: any) => {
+    if (!window.confirm(`¿Aprobar adelanto de ${formatCurrency(a.monto)} para ${a.nombre}?`)) {
+      return;
+    }
+    setProcessingAdvanceId(a.id);
+    try {
+      // 1. Approve advance request
+      await api.editAdelanto(a.id, { estado: 'aprobado' });
+      
+      // 2. Register it as a Gasto
+      const expense = {
+        fecha: getLocalDateString(),
+        categoria: 'Adelanto',
+        descripcion: `Adelanto Aprobado (${a.tipo === 'dia' ? 'Día' : 'Semana'}) - ${a.nombre}`,
+        monto: a.monto,
+        usuario: a.usuario
+      };
+      await api.saveExpense(expense);
+      
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert('Error al aprobar adelanto: ' + (err.message || err));
+    } finally {
+      setProcessingAdvanceId(null);
+    }
+  };
+
+  const handleRejectAdvance = async (a: any) => {
+    if (!window.confirm(`¿Rechazar adelanto de ${formatCurrency(a.monto)} para ${a.nombre}?`)) {
+      return;
+    }
+    setProcessingAdvanceId(a.id);
+    try {
+      await api.editAdelanto(a.id, { estado: 'rechazado' });
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      alert('Error al rechazar adelanto: ' + (err.message || err));
+    } finally {
+      setProcessingAdvanceId(null);
+    }
+  };
+
+  const handleRequestAdvance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = Number(advanceAmount);
+    if (!amountNum || amountNum <= 0) {
+      alert('Por favor ingrese un monto válido.');
+      return;
+    }
+    
+    setSubmittingAdvance(true);
+    try {
+      const todayStr = getLocalDateString();
+      const newAdvance = {
+        id: 'ad_' + Date.now().toString(),
+        fecha: todayStr,
+        usuario: user.usuario,
+        nombre: user.nombre,
+        monto: amountNum,
+        tipo: advanceType,
+        motivo: advanceReason,
+        estado: 'pendiente'
+      };
+      await api.saveAdelanto(newAdvance);
+      
+      setAdvanceAmount('');
+      setAdvanceReason('');
+      setIsRequestingAdvance(false);
+      if (onRefresh) onRefresh();
+      alert('Solicitud de adelanto registrada con éxito. Espera aprobación de un Socio.');
+    } catch (err: any) {
+      alert('Error enviando solicitud de adelanto: ' + (err.message || err));
+    } finally {
+      setSubmittingAdvance(false);
+    }
+  };
   
   // Filtering data by period
   const filterByPeriod = (itemDate: string) => {
@@ -544,6 +646,260 @@ export default function Dashboard({ data, user, onTabChange }: { data: AppData, 
               No hay citas programadas
             </div>
           )}
+        </div>
+      </div>
+
+      {/* SECCIÓN DE ADELANTOS DE PAGO */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        {/* Lado Izquierdo o Principal */}
+        <div className="lg:col-span-2 bg-d1 border border-d3 rounded-2xl overflow-hidden flex flex-col p-6 sm:p-8 space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-d3/50">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">💰</span>
+              <h3 className="text-sm font-bold uppercase tracking-widest text-txt">
+                {isOwner ? 'Solicitudes de Adelantos (Barberos)' : 'Mis Adelantos de Pago'}
+              </h3>
+            </div>
+            {!isOwner && !isRequestingAdvance && (
+              <button
+                onClick={() => setIsRequestingAdvance(true)}
+                className="bg-brand-blue hover:bg-brand-blue2 text-bg text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded-lg transition-transform hover:scale-105"
+              >
+                💸 Solicitar Adelanto
+              </button>
+            )}
+          </div>
+
+          {/* Formulario de Adelanto para Barberos */}
+          {!isOwner && isRequestingAdvance && (
+            <form onSubmit={handleRequestAdvance} className="p-5 bg-d2 border border-brand-blue/20 rounded-xl space-y-4">
+              <h4 className="text-xs font-bold text-brand-blue uppercase">Nueva Solicitud de Adelanto</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-muted">Monto (COP)</label>
+                  <input
+                    type="number"
+                    value={advanceAmount}
+                    onChange={(e) => setAdvanceAmount(e.target.value)}
+                    placeholder="Monto solicitado"
+                    required
+                    className="bg-bg border border-d3 rounded-lg p-2.5 text-xs text-txt font-bold outline-none focus:border-brand-blue"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-muted">Tipo de Adelanto</label>
+                  <select
+                    value={advanceType}
+                    onChange={(e) => setAdvanceType(e.target.value as any)}
+                    className="bg-bg border border-d3 rounded-lg p-2.5 text-xs text-txt font-bold outline-none focus:border-brand-blue"
+                  >
+                    <option value="dia">Adelanto del Día</option>
+                    <option value="semana">Adelanto de la Semana</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase tracking-wider font-bold text-muted">Motivo / Descripción</label>
+                <textarea
+                  value={advanceReason}
+                  onChange={(e) => setAdvanceReason(e.target.value)}
+                  placeholder="Explica brevemente la razón del adelanto..."
+                  rows={2}
+                  className="bg-bg border border-d3 rounded-lg p-2.5 text-xs text-txt font-medium outline-none focus:border-brand-blue"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRequestingAdvance(false)}
+                  className="bg-d3 text-muted text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-lg hover:bg-d3/80 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingAdvance}
+                  className="bg-brand-blue text-bg text-[10px] font-black uppercase tracking-wider px-5 py-2 rounded-lg hover:bg-brand-blue2 transition-all flex items-center gap-1.5"
+                >
+                  {submittingAdvance && <Loader2 className="animate-spin" size={12} />}
+                  Enviar Solicitud
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Listado de Adelantos */}
+          <div className="overflow-x-auto">
+            {isOwner ? (
+              /* Vista del Owner */
+              <div className="space-y-4">
+                {/* Solicitudes de Adelantos Pendientes */}
+                <div>
+                  <h4 className="text-xs font-bold text-brand-gold uppercase tracking-wider mb-3">Solicitudes Pendientes</h4>
+                  {(data.adelantos || []).filter(a => a.estado === 'pendiente').length === 0 ? (
+                    <p className="text-xs text-muted italic bg-d2/30 border border-dashed border-d3 p-4 rounded-xl text-center">
+                      No hay solicitudes de adelantos pendientes.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {(data.adelantos || [])
+                        .filter(a => a.estado === 'pendiente')
+                        .map((a: any) => (
+                          <div key={a.id} className="p-4 bg-d2 border border-brand-gold/20 rounded-xl space-y-3 relative overflow-hidden">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="text-[9px] bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded font-bold uppercase">
+                                  {a.tipo === 'dia' ? 'Adelanto Día' : 'Adelanto Semana'}
+                                </span>
+                                <h5 className="text-sm font-extrabold text-txt uppercase mt-1.5">{a.nombre}</h5>
+                                <p className="text-[9px] text-muted font-mono">{a.fecha}</p>
+                              </div>
+                              <span className="text-base font-black text-brand-gold font-mono">
+                                {formatCurrency(a.monto)}
+                              </span>
+                            </div>
+                            {a.motivo && (
+                              <p className="text-xs text-muted font-medium bg-bg/40 p-2 rounded border border-d3/30 leading-snug">
+                                <span className="font-extrabold uppercase text-[8px] text-muted block mb-0.5">Motivo:</span>
+                                {a.motivo}
+                              </p>
+                            )}
+                            <div className="flex justify-end gap-2 pt-1 border-t border-d3/40">
+                              <button
+                                onClick={() => handleRejectAdvance(a)}
+                                disabled={processingAdvanceId === a.id}
+                                className="bg-danger/10 hover:bg-danger/20 text-danger border border-danger/20 px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center gap-1"
+                              >
+                                <X size={10} /> Rechazar
+                              </button>
+                              <button
+                                onClick={() => handleApproveAdvance(a)}
+                                disabled={processingAdvanceId === a.id}
+                                className="bg-[#3ea6ff] text-[#0c1026] hover:bg-[#66c3ff] px-3.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-lg shadow-brand-blue/10"
+                              >
+                                <Check size={10} /> Aprobar
+                              </button>
+                            </div>
+                          </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Historial Reciente de Adelantos */}
+                <div className="pt-4">
+                  <h4 className="text-xs font-bold text-txt uppercase tracking-wider mb-3">Historial Reciente de Decisiones</h4>
+                  {(data.adelantos || []).filter(a => a.estado !== 'pendiente').length === 0 ? (
+                    <p className="text-xs text-muted italic p-3 text-center">Ningún adelanto procesado recientemente.</p>
+                  ) : (
+                    <div className="overflow-x-auto text-xs">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-d3 text-muted text-[10px] font-bold uppercase">
+                            <th className="py-2">Fecha</th>
+                            <th className="py-2">Barbero</th>
+                            <th className="py-2">Monto</th>
+                            <th className="py-2">Tipo</th>
+                            <th className="py-2 text-right">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-d3/50 font-medium">
+                          {(data.adelantos || [])
+                            .filter(a => a.estado !== 'pendiente')
+                            .slice(0, 5)
+                            .map((a: any) => (
+                              <tr key={a.id}>
+                                <td className="py-2.5 font-mono text-muted">{a.fecha}</td>
+                                <td className="py-2.5 font-extrabold uppercase text-txt">{a.nombre}</td>
+                                <td className="py-2.5 font-bold font-mono text-txt">{formatCurrency(a.monto)}</td>
+                                <td className="py-2.5 uppercase text-[9px] text-muted">{a.tipo}</td>
+                                <td className="py-2.5 text-right">
+                                  <span className={cn(
+                                    "px-2 py-0.5 rounded text-[8px] font-bold uppercase",
+                                    a.estado === 'aprobado' ? "bg-success/20 text-success" : "bg-danger/20 text-danger"
+                                  )}>
+                                    {a.estado}
+                                  </span>
+                                </td>
+                              </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Vista del Barbero */
+              <div>
+                {(data.adelantos || []).filter(a => a.usuario === user.usuario).length === 0 ? (
+                  <p className="text-xs text-muted italic bg-d2/30 border border-dashed border-d3 p-6 rounded-xl text-center">
+                    No has realizado solicitudes de adelantos aún.
+                  </p>
+                ) : (
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-d3 text-muted text-[10px] font-bold uppercase">
+                        <th className="py-2">Fecha</th>
+                        <th className="py-2">Monto</th>
+                        <th className="py-2">Tipo</th>
+                        <th className="py-2">Razón</th>
+                        <th className="py-2 text-right">Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-d3/50 font-medium">
+                      {(data.adelantos || [])
+                        .filter(a => a.usuario === user.usuario)
+                        .map((a: any) => (
+                          <tr key={a.id}>
+                            <td className="py-3 font-mono text-muted">{a.fecha}</td>
+                            <td className="py-3 font-bold font-mono text-brand-blue">{formatCurrency(a.monto)}</td>
+                            <td className="py-3 uppercase text-[9px] font-bold text-txt">{a.tipo}</td>
+                            <td className="py-3 text-muted max-w-[200px] truncate" title={a.motivo}>
+                              {a.motivo || '-'}
+                            </td>
+                            <td className="py-3 text-right">
+                              <span className={cn(
+                                "px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider",
+                                a.estado === 'pendiente' ? "bg-brand-gold/20 text-brand-gold" :
+                                a.estado === 'aprobado' ? "bg-success/20 text-success" :
+                                "bg-danger/20 text-danger"
+                              )}>
+                                {a.estado}
+                              </span>
+                            </td>
+                          </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Lado Derecho Widget Resumen de Políticas */}
+        <div className="bg-gradient-to-br from-d2 to-d1 border border-brand-blue/25 rounded-2xl p-6 sm:p-8 flex flex-col justify-center relative overflow-hidden">
+          <div className="absolute top-4 right-4 text-3xl opacity-10">ℹ️</div>
+          <h4 className="text-xs font-bold text-brand-blue uppercase tracking-widest border-b border-d3/30 pb-3 mb-4 font-mono">Políticas de Adelantos</h4>
+          <ul className="text-xs space-y-3 font-medium text-muted leading-relaxed">
+            <li className="flex items-start gap-2">
+              <span className="text-brand-blue font-bold mt-0.5">•</span>
+              <span>Los adelantos aprobados se descuentan de forma automática del cálculo de tu comisión ya devengada al momento de la liquidación final.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-brand-blue font-bold mt-0.5">•</span>
+              <span><strong>Adelanto del Día:</strong> Aplica sobre los cortes realizados hoy.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-brand-blue font-bold mt-0.5">•</span>
+              <span><strong>Adelanto de la Semana:</strong> Aplica sobre los cortes acumulados en la semana actual.</span>
+            </li>
+            <li className="flex items-start gap-1.5 mt-4 p-2.5 bg-brand-blue/10 border border-brand-blue/20 rounded-lg text-txt text-[10px]">
+              <AlertCircle size={15} className="text-[#3ea6ff] shrink-0" />
+              <span>Para consultas adicionales, comuníquese directamente con el Socio/Administrador.</span>
+            </li>
+          </ul>
         </div>
       </div>
     </div>
