@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { AppData, User } from '../types';
-import { formatCurrency, cn, getBogotaDateString } from '../utils';
+import { formatCurrency, cn, getBogotaDateString, getWeeklyDateRange } from '../utils';
 import { api } from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -150,8 +150,8 @@ export default function Dashboard({
     const todayMidnight = new Date(getBogotaDateString() + 'T00:00:00');
 
     if (period === 'week') {
-      const weekAgo = new Date(todayMidnight.getTime() - 7 * 24 * 60 * 60 * 1000);
-      return date >= weekAgo;
+      const { start, end } = getWeeklyDateRange();
+      return itemDate >= start && itemDate <= end;
     }
     if (period === 'month') {
       const monthAgo = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth() - 1, todayMidnight.getDate());

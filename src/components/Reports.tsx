@@ -10,10 +10,12 @@ import {
   ArrowUpRight,
   Sparkles,
   Calendar,
-  Coins
+  Coins,
+  Receipt,
+  Plus
 } from 'lucide-react';
 import { AppData, User } from '../types';
-import { formatCurrency, cn, getBogotaDateString } from '../utils';
+import { formatCurrency, cn, getBogotaDateString, getWeeklyDateRange } from '../utils';
 import { api } from '../api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
@@ -28,6 +30,14 @@ export default function Reports({
 }) {
   const [filter, setFilter] = useState('semana'); // Default to 'semana'
   const [payingUser, setPayingUser] = useState<string | null>(null);
+
+  // New Operational Expense states
+  const [addingCustomExpense, setAddingCustomExpense] = useState(false);
+  const [expenseCategory, setExpenseCategory] = useState('Servicios Públicos');
+  const [expenseDescription, setExpenseDescription] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseDate, setExpenseDate] = useState(() => getBogotaDateString());
+  const [submittingExpense, setSubmittingExpense] = useState(false);
 
   const getLocalDateString = (d: Date = new Date()) => {
     return getBogotaDateString(d);
@@ -64,10 +74,8 @@ export default function Reports({
     }
     
     if (filter === 'semana') {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      const limit = getLocalDateString(d);
-      return sales.filter(v => v.fecha >= limit);
+      const { start, end } = getWeeklyDateRange();
+      return sales.filter(v => v.fecha >= start && v.fecha <= end);
     }
     
     if (filter === 'mes') {
@@ -93,6 +101,17 @@ export default function Reports({
   const serviceSales = filteredSales.filter(v => v.tipo === 'servicio').reduce((acc, v) => acc + (v.valor * v.cantidad), 0);
   const productSales = filteredSales.filter(v => v.tipo === 'producto').reduce((acc, v) => acc + (v.valor * v.cantidad), 0);
   
+  // Margins calculations for sold products
+  const totalProductCost = filteredSales
+    .filter(v => v.tipo === 'producto')
+    .reduce((acc, v) => {
+      const p = data.productos.find(prod => prod.id === v.item_id);
+      const unitCost = p ? (p.costo || 0) : 0;
+      return acc + (unitCost * v.cantidad);
+    }, 0);
+  const productProfit = productSales - totalProductCost;
+  const productMarginPercent = productSales > 0 ? Math.round((productProfit / productSales) * 100) : 0;
+  
   const getFilteredExpenses = () => {
     const expenses = data.gastos;
     const todayStr = getLocalDateString();
@@ -102,10 +121,8 @@ export default function Reports({
     }
     
     if (filter === 'semana') {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      const limit = getLocalDateString(d);
-      return expenses.filter(g => g.fecha >= limit);
+      const { start, end } = getWeeklyDateRange();
+      return expenses.filter(g => g.fecha >= start && g.fecha <= end);
     }
     
     if (filter === 'mes') {
@@ -188,10 +205,8 @@ export default function Reports({
       if (filter === 'hoy') {
         matchesPeriod = a.fecha === todayStr;
       } else if (filter === 'semana') {
-        const d = new Date();
-        d.setDate(d.getDate() - 7);
-        const limit = getLocalDateString(d);
-        matchesPeriod = a.fecha >= limit;
+        const { start, end } = getWeeklyDateRange();
+        matchesPeriod = a.fecha >= start && a.fecha <= end;
       } else if (filter === 'mes') {
         const d = new Date();
         d.setMonth(d.getMonth() - 1);
@@ -292,6 +307,37 @@ export default function Reports({
     }
   };
 
+  const handleSaveCustomExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = Number(expenseAmount);
+    if (!amountNum || amountNum <= 0) {
+      alert('Por favor ingrese un monto válido.');
+      return;
+    }
+
+    setSubmittingExpense(true);
+    try {
+      const newExpense = {
+        fecha: expenseDate || getLocalDateString(),
+        categoria: expenseCategory,
+        descripcion: expenseDescription.trim(),
+        monto: amountNum,
+        usuario: user.usuario
+      };
+
+      await api.saveExpense(newExpense);
+      setExpenseAmount('');
+      setExpenseDescription('');
+      setAddingCustomExpense(false);
+      if (onRefresh) onRefresh();
+      alert('Gasto registrado con éxito como egreso del negocio.');
+    } catch (err: any) {
+      alert('Error al registrar gasto: ' + (err.message || err));
+    } finally {
+      setSubmittingExpense(false);
+    }
+  };
+
   // Handle registering commission payment as an official Gasto
   const handlePayCommission = async (payout: any) => {
     if (!onRefresh) return;
@@ -309,7 +355,7 @@ export default function Reports({
         : filter === 'hoy' 
           ? todayStr 
           : filter === 'semana' 
-            ? 'Últimos 7 días' 
+            ? `Semana (${getWeeklyDateRange().start} al ${getWeeklyDateRange().end})` 
             : filter === 'mes' 
               ? 'Último mes' 
               : 'Histórico';
@@ -438,7 +484,151 @@ export default function Reports({
       </div>
 
       {isOwner && (
-        <div className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 space-y-6">
+        <>
+          {/* SECCIÓN: CONTROL Y REGISTRO DE GASTOS OPERATIVOS */}
+          <div className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-d3/50 pb-4">
+              <div>
+                <h3 className="text-sm font-black text-txt uppercase tracking-widest flex items-center gap-2">
+                  <Receipt size={16} className="text-brand-blue" /> Gestión de Gastos Operativos ({filter})
+                </h3>
+                <p className="text-[10px] text-muted font-semibold mt-0.5 uppercase tracking-wide">
+                  Arriendos, servicios públicos, insumos de barbería y gastos directos del salón
+                </p>
+              </div>
+              <button
+                onClick={() => setAddingCustomExpense(!addingCustomExpense)}
+                className="bg-brand-blue hover:bg-brand-blue2 text-bg text-[10px] font-black uppercase px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-lg shadow-brand-blue/10"
+              >
+                <Plus size={12} /> Registrar Gasto
+              </button>
+            </div>
+
+            {addingCustomExpense && (
+              <form onSubmit={handleSaveCustomExpense} className="p-5 bg-bg/50 border border-brand-blue/20 rounded-xl space-y-4 animate-fade-in">
+                <h4 className="text-xs font-black uppercase tracking-widest text-brand-blue mb-2 flex items-center gap-1">
+                  <Receipt size={14} /> Ingresar Nuevo Gasto
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted">Categoría del Gasto</label>
+                    <select
+                      value={expenseCategory}
+                      onChange={(e) => setExpenseCategory(e.target.value)}
+                      className="bg-d2 border border-d3 rounded-lg px-3.5 py-2.5 text-xs text-txt font-bold outline-none focus:border-brand-blue cursor-pointer"
+                    >
+                      <option value="Servicios Públicos">Servicios Públicos</option>
+                      <option value="Arriendo">Arriendo</option>
+                      <option value="Insumos o Suministros">Insumos o Suministros</option>
+                      <option value="Mantenimiento">Mantenimiento</option>
+                      <option value="Publicidad">Publicidad</option>
+                      <option value="Otros Gastos">Otros Gastos</option>
+                    </select>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted">Fecha del Gasto</label>
+                    <input
+                      type="date"
+                      value={expenseDate}
+                      onChange={(e) => setExpenseDate(e.target.value)}
+                      required
+                      className="bg-d2 border border-d3 rounded-lg px-3.5 py-2 text-xs text-txt font-bold outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted">Monto (COP)</label>
+                    <input
+                      type="number"
+                      placeholder="P. ej. 150000"
+                      value={expenseAmount}
+                      onChange={(e) => setExpenseAmount(e.target.value)}
+                      required
+                      className="bg-d2 border border-d3 rounded-lg px-3.5 py-2 text-xs text-txt font-bold outline-none focus:border-brand-blue"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] uppercase font-bold text-muted">Descripción / Detalle</label>
+                    <input
+                      type="text"
+                      placeholder="P. ej. Pago recibo de luz de Mayo"
+                      value={expenseDescription}
+                      onChange={(e) => setExpenseDescription(e.target.value)}
+                      required
+                      className="bg-d2 border border-d3 rounded-lg px-3.5 py-2 text-xs text-txt font-medium outline-none focus:border-brand-blue"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingCustomExpense(false);
+                      setExpenseAmount('');
+                      setExpenseDescription('');
+                    }}
+                    className="bg-d3/80 hover:bg-d3 text-muted px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingExpense}
+                    className="bg-brand-blue text-bg font-black uppercase text-[10px] px-5 py-2 rounded-lg hover:bg-[#66c3ff] transition-all flex items-center gap-1.5 shadow-lg shadow-brand-blue/10"
+                  >
+                    {submittingExpense ? (
+                      <>
+                        <Loader2 className="animate-spin" size={10} />
+                        Procesando...
+                      </>
+                    ) : (
+                      'Guardar Gasto'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="space-y-3">
+              <span className="text-[10px] font-black uppercase text-muted tracking-widest block">Historial de egresos directos (Periodo seleccionado)</span>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[300px] overflow-y-auto pr-1">
+                {operationalExpensesList.map((g, idx) => (
+                  <div key={idx} className="bg-d2 border border-d3 rounded-xl p-4 flex flex-col justify-between space-y-3 hover:border-brand-blue/20 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="bg-danger/10 text-danger text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded border border-danger/20">
+                          {g.categoria}
+                        </span>
+                        <p className="text-xs font-bold text-txt mt-2.5 tracking-tight line-clamp-2">{g.descripcion}</p>
+                      </div>
+                      <span className="text-sm font-black font-mono text-danger">-{formatCurrency(g.monto)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[9px] text-muted font-extrabold border-t border-d3/30 pt-2 uppercase tracking-wider">
+                      <div className="flex items-center gap-1">
+                        <Calendar size={10} />
+                        <span>{g.fecha}</span>
+                      </div>
+                      {g.usuario && (
+                        <span className="font-mono">Socio: {g.usuario}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {operationalExpensesList.length === 0 && (
+                  <div className="col-span-full py-12 flex flex-col items-center justify-center text-muted border border-dashed border-d3 rounded-xl bg-d2/30 gap-2 opacity-50">
+                    <Receipt size={32} strokeWidth={1.5} />
+                    <p className="text-[10px] font-black uppercase tracking-widest">Sin gastos directos detectados en este periodo</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* DISTRIBUCIÓN Y LIQUIDACIÓN DE COMISIONES */}
+          <div className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-d3/50 pb-4">
             <div>
               <h3 className="text-sm font-black text-txt uppercase tracking-widest">
@@ -448,9 +638,9 @@ export default function Reports({
                 Calcula comisiones devengadas contra comisiones liquidadas reales por barberos
               </p>
             </div>
-            {filter === 'rango' && (
+            {(filter === 'rango' || filter === 'semana') && (
               <span className="text-[9px] text-brand-gold font-bold bg-brand-gold/10 px-2.5 py-1.5 rounded-lg border border-brand-gold/20 font-mono">
-                {startDate} / {endDate}
+                {filter === 'semana' ? `${getWeeklyDateRange().start} a ${getWeeklyDateRange().end}` : `${startDate} / ${endDate}`}
               </span>
             )}
           </div>
@@ -651,7 +841,8 @@ export default function Reports({
             </div>
           </div>
         </div>
-      )}
+      </>
+    )}
 
       {/* Origen de Ingresos/Detalle */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -683,12 +874,28 @@ export default function Reports({
                 <span className="font-mono font-black text-brand-blue">{formatCurrency(serviceSales)}</span>
              </div>
              
-             <div className="flex items-center justify-between p-4 bg-d2 rounded-xl border border-d3 shadow-sm">
-                <div className="flex items-center gap-4">
-                   <div className="p-2 bg-brand-gold/10 text-brand-gold rounded-lg"><ShoppingBag size={18} /></div>
-                   <p className="text-sm font-black text-txt uppercase tracking-tight">Venta de Productos</p>
+             <div className="p-4 bg-d2 rounded-xl border border-d3 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-4">
+                      <div className="p-2 bg-brand-gold/10 text-brand-gold rounded-lg"><ShoppingBag size={18} /></div>
+                      <p className="text-sm font-black text-txt uppercase tracking-tight">Venta de Productos</p>
+                   </div>
+                   <span className="font-mono font-black text-brand-gold">{formatCurrency(productSales)}</span>
                 </div>
-                <span className="font-mono font-black text-brand-gold">{formatCurrency(productSales)}</span>
+                {isOwner && productSales > 0 && (
+                   <div className="pt-2.5 border-t border-d3/30 grid grid-cols-2 gap-3 text-xs font-semibold uppercase tracking-wider">
+                      <div className="bg-bg/40 p-2 rounded-lg border border-d3/20">
+                         <span className="text-[8px] text-muted block mb-0.5 animate-pulse">Costo Total</span>
+                         <span className="font-mono font-bold text-txt text-[11px]">{formatCurrency(totalProductCost)}</span>
+                      </div>
+                      <div className="bg-success/5 p-2 rounded-lg border border-success/15">
+                         <span className="text-[8px] text-success/80 block mb-0.5">Ganancia Real</span>
+                         <span className="font-mono font-black text-success text-[11px]">
+                            {formatCurrency(productProfit)} <span className="text-[9px] text-muted font-normal">({productMarginPercent}%)</span>
+                         </span>
+                      </div>
+                   </div>
+                )}
              </div>
 
              <div className="mt-8 pt-6 border-t border-d3">

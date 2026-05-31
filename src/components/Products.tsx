@@ -103,18 +103,38 @@ export default function Products({ data, onRefresh, isAdmin }: { data: AppData, 
               <h4 className="text-muted text-[10px] uppercase font-bold tracking-widest mb-1">{product.categoria}</h4>
               <p className="text-lg font-bold text-txt mb-4 truncate">{product.nombre}</p>
               
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] text-muted uppercase font-bold">P. Venta</p>
-                  <p className="text-xl font-mono font-bold text-brand-gold">{formatCurrency(product.venta)}</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-muted uppercase font-bold">P. Venta</p>
+                    <p className="text-xl font-mono font-bold text-brand-gold">{formatCurrency(product.venta)}</p>
+                  </div>
+                  {isAdmin && (
+                     <button 
+                      onClick={() => openForm(product)}
+                      className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-brand-blue transition-all"
+                     >
+                       <Edit2 size={16} />
+                     </button>
+                  )}
                 </div>
+
                 {isAdmin && (
-                   <button 
-                    onClick={() => openForm(product)}
-                    className="p-2 rounded-lg hover:bg-white/5 text-muted hover:text-brand-blue transition-all"
-                   >
-                     <Edit2 size={16} />
-                   </button>
+                  <div className="pt-2.5 border-t border-white/5 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-[9px] text-muted uppercase font-bold">Costo Base</p>
+                      <p className="font-mono text-txt/80">{formatCurrency(product.costo || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-muted uppercase font-bold">Ganancia</p>
+                      <p className="font-mono text-success font-bold">
+                        {formatCurrency(product.venta - (product.costo || 0))}
+                        <span className="text-[9px] text-muted ml-1 font-normal">
+                          ({product.venta > 0 ? Math.round(((product.venta - (product.costo || 0)) / product.venta) * 100) : 0}%)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>

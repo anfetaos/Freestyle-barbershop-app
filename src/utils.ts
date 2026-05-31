@@ -147,3 +147,37 @@ export const formatWhatsAppPhone = (rawPhone: any): string => {
   }
   return cleaned;
 };
+
+export const getWeeklyDateRange = (): { start: string; end: string } => {
+  const bogotaDateStr = getBogotaDateString();
+  const parts = bogotaDateStr.split('-');
+  const bYear = parseInt(parts[0], 10);
+  const bMonth = parseInt(parts[1], 10) - 1;
+  const bDay = parseInt(parts[2], 10);
+  
+  const today = new Date(bYear, bMonth, bDay, 12, 0, 0);
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  
+  const mondayOffset = dayOfWeek === 0 ? 7 : dayOfWeek;
+  
+  if (mondayOffset === 1) {
+    const prevMondayDate = new Date(today);
+    prevMondayDate.setDate(today.getDate() - 7);
+    
+    const prevSundayDate = new Date(today);
+    prevSundayDate.setDate(today.getDate() - 1);
+    
+    return {
+      start: getBogotaDateString(prevMondayDate),
+      end: getBogotaDateString(prevSundayDate)
+    };
+  } else {
+    const thisMondayDate = new Date(today);
+    thisMondayDate.setDate(today.getDate() - (mondayOffset - 1));
+    
+    return {
+      start: getBogotaDateString(thisMondayDate),
+      end: bogotaDateStr
+    };
+  }
+};
