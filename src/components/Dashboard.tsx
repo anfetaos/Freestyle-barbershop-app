@@ -385,7 +385,7 @@ export default function Dashboard({
           <div className="px-6 py-4 border-b border-d3 flex justify-between items-center bg-d2/50">
             <h3 className="text-sm font-bold uppercase tracking-widest text-txt">{isOwner ? 'Rendimiento Barberos' : 'Mis Ventas Diarias'}</h3>
             <span className="text-[10px] text-brand-blue font-bold uppercase tracking-wider">
-              {period === 'day' ? 'Hoy' : period === 'week' ? '7 días' : period === 'month' ? '30 días' : 'Este año'}
+              {period === 'day' ? 'Hoy' : period === 'week' ? `Semana (${getWeeklyDateRange().start} al ${getWeeklyDateRange().end})` : period === 'month' ? '30 días' : 'Este año'}
             </span>
           </div>
           <div className="p-4 sm:p-6 h-[250px] sm:h-[300px] w-full">

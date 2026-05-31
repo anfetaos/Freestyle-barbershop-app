@@ -155,28 +155,38 @@ export const getWeeklyDateRange = (): { start: string; end: string } => {
   const bMonth = parseInt(parts[1], 10) - 1;
   const bDay = parseInt(parts[2], 10);
   
-  const today = new Date(bYear, bMonth, bDay, 12, 0, 0);
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  // Usamos Date.UTC a las 12:00:00 para hacer matemática de calendario pura sin interferencia de zonas horarias
+  const todayUTC = new Date(Date.UTC(bYear, bMonth, bDay, 12, 0, 0));
+  const dayOfWeek = todayUTC.getUTCDay(); // 0 = Domingo, 1 = Lunes, 2 = Martes, etc.
   
   const mondayOffset = dayOfWeek === 0 ? 7 : dayOfWeek;
   
+  const formatUTCDate = (d: Date): string => {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   if (mondayOffset === 1) {
-    const prevMondayDate = new Date(today);
-    prevMondayDate.setDate(today.getDate() - 7);
+    // Si hoy es lunes, mostramos la semana completa anterior (del lunes anterior al domingo anterior)
+    const prevMondayDate = new Date(todayUTC.getTime());
+    prevMondayDate.setUTCDate(todayUTC.getUTCDate() - 7);
     
-    const prevSundayDate = new Date(today);
-    prevSundayDate.setDate(today.getDate() - 1);
+    const prevSundayDate = new Date(todayUTC.getTime());
+    prevSundayDate.setUTCDate(todayUTC.getUTCDate() - 1);
     
     return {
-      start: getBogotaDateString(prevMondayDate),
-      end: getBogotaDateString(prevSundayDate)
+      start: formatUTCDate(prevMondayDate),
+      end: formatUTCDate(prevSundayDate)
     };
   } else {
-    const thisMondayDate = new Date(today);
-    thisMondayDate.setDate(today.getDate() - (mondayOffset - 1));
+    // Si es de martes a domingo, mostramos desde el lunes de esta semana hasta hoy
+    const thisMondayDate = new Date(todayUTC.getTime());
+    thisMondayDate.setUTCDate(todayUTC.getUTCDate() - (mondayOffset - 1));
     
     return {
-      start: getBogotaDateString(thisMondayDate),
+      start: formatUTCDate(thisMondayDate),
       end: bogotaDateStr
     };
   }
