@@ -37,9 +37,10 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
       setGasUrl(customGasUrl);
       await api.updateConfig(configs);
       onRefresh();
-      alert('Configuración actualizada');
-    } catch (err) {
+      alert('Configuración actualizada con éxito');
+    } catch (err: any) {
       console.error(err);
+      alert('Error guardando configuración: ' + (err.message || err));
     } finally {
       setLoading(false);
     }

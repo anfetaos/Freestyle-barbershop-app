@@ -319,7 +319,7 @@ export default function Reports({
         categoria: 'Comisión',
         descripcion: `Pago Comisión - ${payout.name} (Periodo: ${rangeLabel})`,
         monto: payout.pending,
-        usuario: payout.username
+        usuario: user.usuario
       };
 
       await api.saveExpense(expense);
