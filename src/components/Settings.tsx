@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Save, LogOut, Settings as SettingsIcon, Globe, Instagram, MessageSquare, CreditCard, Percent, Loader2, Share2, Clipboard, Server } from 'lucide-react';
+import { Save, LogOut, Settings as SettingsIcon, Globe, Instagram, MessageSquare, CreditCard, Percent, Loader2, Share2, Clipboard, Server, Check, ChevronDown, ChevronUp } from 'lucide-react';
 import { AppData, Config } from '../types';
 import { api, getGasUrl, setGasUrl } from '../api';
+// @ts-ignore
+import rawAppsScript from '../../BACKEND_APPS_SCRIPT.gs?raw';
 
 export default function Settings({ data, onRefresh }: { data: AppData, onRefresh: () => void }) {
   const [loading, setLoading] = useState(false);
   const [customGasUrl, setCustomGasUrl] = useState(() => getGasUrl());
+  const [showCode, setShowCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   
   // Define expected configuration keys
   const defaultKeys = [
@@ -173,6 +177,51 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
             <p className="pt-1 text-[11px]">
               Una vez implementada la nueva versión, pega la URL arriba y haz clic en "Guardar Cambios".
             </p>
+          </div>
+
+          <div className="pt-4 border-t border-white/5 space-y-3">
+            <button
+              type="button"
+              onClick={() => setShowCode(!showCode)}
+              className="flex items-center justify-between w-full p-3 bg-bg/40 hover:bg-bg/80 border border-white/5 rounded-xl text-xs text-muted hover:text-txt uppercase font-black tracking-widest transition-all"
+            >
+              <span className="flex items-center gap-2">
+                📋 Código de Google Apps Script (v2.0)
+              </span>
+              {showCode ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showCode && (
+              <div className="space-y-3 animate-fade-in text-left">
+                <p className="text-[11px] text-muted leading-relaxed">
+                  Copia este código e ingrésalo en tu editor de Google Apps Script para actualizar la API de tu hoja de cálculo a la versión <b>v2.0</b>. Esto habilitará todas las nuevas funciones como la <b>Liquidación de Comisiones</b> y el registro de egresos de caja.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(rawAppsScript);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2500);
+                    }}
+                    className="flex items-center justify-center gap-2 bg-brand-gold hover:bg-brand-gold/90 text-bg text-[11px] font-black uppercase tracking-wider py-2.5 px-4 rounded-xl transition-all"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check size={14} /> ¡Copiado con Éxito!
+                      </>
+                    ) : (
+                      <>
+                        <Clipboard size={14} /> Copiar Código Completo
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="bg-bg/95 border border-white/10 rounded-xl p-4 overflow-x-auto max-h-[300px] overflow-y-auto font-mono text-[10px] text-brand-gold leading-tight select-all">
+                  <pre>{rawAppsScript}</pre>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

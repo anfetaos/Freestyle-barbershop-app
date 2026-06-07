@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { 
   TrendingUp, 
   Scissors, 
@@ -30,6 +31,16 @@ export default function Reports({
 }) {
   const [filter, setFilter] = useState('semana'); // Default to 'semana'
   const [payingUser, setPayingUser] = useState<string | null>(null);
+  const [commissionConfirm, setCommissionConfirm] = useState<{
+    isOpen: boolean;
+    payout: any | null;
+    status: 'idle' | 'loading' | 'success' | 'error';
+    errorMessage?: string;
+  }>({
+    isOpen: false,
+    payout: null,
+    status: 'idle'
+  });
 
   // New Operational Expense states
   const [addingCustomExpense, setAddingCustomExpense] = useState(false);
@@ -265,6 +276,8 @@ export default function Reports({
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawDescription, setWithdrawDescription] = useState('');
   const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [expenseError, setExpenseError] = useState<string | null>(null);
 
   const handleWithdrawUtilities = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -284,6 +297,7 @@ export default function Reports({
     }
 
     setSubmittingWithdraw(true);
+    setWithdrawError(null);
     try {
       const todayStr = getLocalDateString();
       const expense = {
@@ -301,6 +315,8 @@ export default function Reports({
       if (onRefresh) onRefresh();
       alert('Retiro/Pago de utilidades registrado con éxito como egreso del negocio.');
     } catch (err: any) {
+      console.error(err);
+      setWithdrawError(err.message || String(err));
       alert('Error al registrar retiro de utilidades: ' + (err.message || err));
     } finally {
       setSubmittingWithdraw(false);
@@ -316,6 +332,7 @@ export default function Reports({
     }
 
     setSubmittingExpense(true);
+    setExpenseError(null);
     try {
       const newExpense = {
         fecha: expenseDate || getLocalDateString(),
@@ -332,22 +349,31 @@ export default function Reports({
       if (onRefresh) onRefresh();
       alert('Gasto registrado con éxito como egreso del negocio.');
     } catch (err: any) {
+      console.error(err);
+      setExpenseError(err.message || String(err));
       alert('Error al registrar gasto: ' + (err.message || err));
     } finally {
       setSubmittingExpense(false);
     }
   };
 
-  // Handle registering commission payment as an official Gasto
-  const handlePayCommission = async (payout: any) => {
-    if (!onRefresh) return;
-    const confirmMessage = `¿Registrar pago de comisión para ${payout.name}?\n\n` +
-      `Monto del pago: ${formatCurrency(payout.pending)}\n` +
-      `Periodo seleccionado: ${filter === 'rango' ? `${startDate} al ${endDate}` : filter.toUpperCase()}`;
-    
-    if (!window.confirm(confirmMessage)) return;
+  // Open modal for registering commission payment
+  const handlePayCommission = (payout: any) => {
+    setCommissionConfirm({
+      isOpen: true,
+      payout,
+      status: 'idle'
+    });
+  };
+
+  // Perform backend call to save commission payment
+  const executePayCommission = async () => {
+    const payout = commissionConfirm.payout;
+    if (!payout || !onRefresh) return;
 
     setPayingUser(payout.username);
+    setCommissionConfirm(prev => ({ ...prev, status: 'loading' }));
+
     try {
       const todayStr = getLocalDateString();
       const rangeLabel = filter === 'rango' 
@@ -370,9 +396,14 @@ export default function Reports({
 
       await api.saveExpense(expense);
       onRefresh(); // reload standard dashboard / reports metrics immediately 
+      setCommissionConfirm(prev => ({ ...prev, status: 'success' }));
     } catch (err: any) {
       console.error(err);
-      alert('Error registrando pago: ' + (err.message || err));
+      setCommissionConfirm(prev => ({ 
+        ...prev, 
+        status: 'error', 
+        errorMessage: err.message || String(err) 
+      }));
     } finally {
       setPayingUser(null);
     }
@@ -569,6 +600,7 @@ export default function Reports({
                       setAddingCustomExpense(false);
                       setExpenseAmount('');
                       setExpenseDescription('');
+                      setExpenseError(null);
                     }}
                     className="bg-d3/80 hover:bg-d3 text-muted px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all"
                   >
@@ -589,6 +621,20 @@ export default function Reports({
                     )}
                   </button>
                 </div>
+
+                {expenseError && (expenseError.includes("Acción no reconocida") || expenseError.includes("guardarGasto")) && (
+                  <div className="p-3 bg-brand-gold/10 border border-brand-gold/25 rounded-lg text-left text-[11px] leading-relaxed text-txt select-text animate-fade-in">
+                    <strong className="text-brand-gold block font-black mb-1 uppercase tracking-wider text-[10px]">💡 CÓMO SOLUCIONAR:</strong>
+                    Tu versión de <strong className="text-brand-gold">Google Apps Script</strong> está desactualizada y no tiene la acción <code className="bg-bg px-1 py-0.5 rounded text-brand-gold font-mono">guardarGasto</code>.
+                    <ol className="list-decimal list-inside mt-1.5 space-y-1 text-muted">
+                      <li>Abre el editor de Google Apps Script.</li>
+                      <li>Haz clic en <strong className="text-txt">Implementar &gt; Administrar implementaciones</strong>.</li>
+                      <li>Edita la versión activa seleccionando <strong className="text-txt font-bold">"Nueva versión"</strong>.</li>
+                      <li>Haz clic en <strong className="text-txt">Implementar</strong> y copia la nueva URL generada.</li>
+                      <li>Pégala en la pestaña <strong className="text-txt">Configuración</strong> y haz clic en "Guardar Cambios".</li>
+                    </ol>
+                  </div>
+                )}
               </form>
             )}
 
@@ -764,7 +810,10 @@ export default function Reports({
                     <div className="flex justify-end gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => setWithdrawingUtilities(false)}
+                        onClick={() => {
+                          setWithdrawingUtilities(false);
+                          setWithdrawError(null);
+                        }}
                         className="bg-d3/80 hover:bg-d3 text-muted px-3 py-1.5 rounded text-[9px] font-bold uppercase"
                       >
                         Cancelar
@@ -778,6 +827,20 @@ export default function Reports({
                         Registrar Egreso
                       </button>
                     </div>
+
+                    {withdrawError && (withdrawError.includes("Acción no reconocida") || withdrawError.includes("guardarGasto")) && (
+                      <div className="p-3 bg-brand-gold/10 border border-brand-gold/25 rounded-lg text-left text-[11px] leading-relaxed text-txt select-text animate-fade-in mt-2">
+                        <strong className="text-brand-gold block font-black mb-1 uppercase tracking-wider text-[10px]">💡 CÓMO SOLUCIONAR:</strong>
+                        Tu versión de <strong className="text-brand-gold">Google Apps Script</strong> está desactualizada y no tiene la acción <code className="bg-bg px-1 py-0.5 rounded text-brand-gold font-mono">guardarGasto</code>.
+                        <ol className="list-decimal list-inside mt-1 space-y-0.5 text-muted">
+                          <li>Abre el editor de Google Apps Script.</li>
+                          <li>Haz clic en <strong className="text-txt">Implementar &gt; Administrar implementaciones</strong>.</li>
+                          <li>Edita la versión activa seleccionando <strong className="text-txt font-bold">"Nueva versión"</strong>.</li>
+                          <li>Haz clic en <strong className="text-txt">Implementar</strong> y copia la nueva URL generada.</li>
+                          <li>Pégala en la pestaña <strong className="text-txt">Configuración</strong> y haz clic en "Guardar Cambios".</li>
+                        </ol>
+                      </div>
+                    )}
                   </form>
                 ) : (
                   <button
@@ -911,6 +974,169 @@ export default function Reports({
           </div>
         </div>
       </div>
+
+      {/* VENTANA DE CONFIRMACIÓN DE COMISIONES (IN-APP) */}
+      {commissionConfirm.isOpen && commissionConfirm.payout && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+          <div 
+            className="absolute inset-0 bg-black/85 backdrop-blur-sm" 
+            onClick={() => {
+              if (commissionConfirm.status !== 'loading') {
+                setCommissionConfirm({ isOpen: false, payout: null, status: 'idle' });
+              }
+            }}
+          ></div>
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-sm bg-d2 border border-white/10 rounded-3xl p-6 relative z-10 shadow-2xl space-y-5 text-left"
+          >
+            {/* Modal Header */}
+            <div className="text-center">
+              <span className="text-[9px] bg-brand-gold/10 text-brand-gold border border-brand-gold/20 px-3 py-1 rounded-full font-bold uppercase tracking-widest animate-pulse">
+                Confirmación de Pago
+              </span>
+              <h3 className="text-lg font-black text-txt uppercase tracking-tight mt-3 text-center">
+                Liquidar Comisión
+              </h3>
+            </div>
+
+            {/* Modal Body depending on status */}
+            {commissionConfirm.status === 'idle' && (
+              <>
+                <div className="bg-bg/60 p-4 rounded-xl border border-d3/30 space-y-3.5">
+                  <div className="flex justify-between items-center pb-2 border-b border-d3/10">
+                    <span className="text-xs text-muted uppercase font-bold text-left">Barbero</span>
+                    <span className="text-sm font-black text-txt uppercase text-right">{commissionConfirm.payout.name}</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center pb-2 border-b border-d3/10">
+                    <span className="text-xs text-muted uppercase font-bold text-left">Usuario</span>
+                    <span className="text-xs font-mono font-bold text-brand-blue text-right">@{commissionConfirm.payout.username}</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pb-2 border-b border-d3/10">
+                    <span className="text-xs text-muted uppercase font-bold text-left">Periodo</span>
+                    <span className="text-[10px] text-brand-blue font-bold uppercase tracking-wider text-right">
+                      {filter === 'rango' 
+                        ? `${startDate} al ${endDate}` 
+                        : filter === 'hoy' 
+                          ? 'Hoy' 
+                          : filter === 'semana' 
+                            ? `Semana (${getWeeklyDateRange().start} / ${getWeeklyDateRange().end})` 
+                            : filter === 'mes' 
+                              ? 'Último mes' 
+                              : 'Histórico'}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col items-center pt-2">
+                    <span className="text-[10px] text-muted uppercase font-bold tracking-widest">Monto a Liquidar</span>
+                    <span className="text-xl font-black text-brand-gold font-mono tracking-tighter mt-1">
+                      {formatCurrency(commissionConfirm.payout.pending)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCommissionConfirm({ isOpen: false, payout: null, status: 'idle' })}
+                    className="flex-1 bg-d1 hover:bg-bg border border-white/5 hover:border-white/10 text-muted hover:text-txt py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executePayCommission}
+                    className="flex-1 bg-brand-gold hover:bg-brand-gold/90 text-bg py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-brand-gold/10"
+                  >
+                    Confirmar Pago 💳
+                  </button>
+                </div>
+              </>
+            )}
+
+            {commissionConfirm.status === 'loading' && (
+              <div className="py-8 flex flex-col items-center justify-center space-y-4 text-center animate-pulse">
+                <Loader2 className="animate-spin text-brand-gold" size={40} />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-txt uppercase tracking-wider text-center">Registrando Pago en Google Sheets</p>
+                  <p className="text-[10px] text-muted font-medium text-center">Sincronizando datos con el servidor...</p>
+                </div>
+              </div>
+            )}
+
+            {commissionConfirm.status === 'success' && (
+              <div className="py-4 flex flex-col items-center justify-center space-y-5 text-center">
+                <div className="w-14 h-14 bg-success/15 border border-success/30 rounded-full flex items-center justify-center text-success animate-bounce mx-auto">
+                  <CheckCircle2 size={32} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-txt uppercase tracking-wider text-center">Pago Exitoso</p>
+                  <p className="text-xs text-muted text-center leading-relaxed">
+                    La comisión para <strong className="text-txt">{commissionConfirm.payout.name}</strong> por valor de <strong className="text-brand-gold font-mono">{formatCurrency(commissionConfirm.payout.pending)}</strong> ha sido registrada como un egreso del negocio.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCommissionConfirm({ isOpen: false, payout: null, status: 'idle' })}
+                  className="w-full bg-success hover:bg-success/90 text-white py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Entendido / Continuar
+                </button>
+              </div>
+            )}
+
+            {commissionConfirm.status === 'error' && (
+              <div className="py-4 flex flex-col items-center justify-center space-y-5 text-center">
+                <div className="w-14 h-14 bg-danger/15 border border-danger/30 rounded-full flex items-center justify-center text-danger mx-auto">
+                  <span className="text-lg font-black font-mono">!</span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-black text-danger uppercase tracking-wider text-center">Error de Registro</p>
+                  <p className="text-xs text-muted leading-relaxed text-center font-medium">
+                    No se pudo guardar el pago. Detalle técnico: <br />
+                    <span className="text-txt font-mono block bg-bg/50 p-2 rounded-lg mt-2 text-[10px] border border-white/5 break-all max-h-[100px] overflow-y-auto select-text">
+                      {commissionConfirm.errorMessage || 'Error de conexión o acción no reconocida.'}
+                    </span>
+                  </p>
+
+                  {commissionConfirm.errorMessage && (commissionConfirm.errorMessage.includes("Acción no reconocida") || commissionConfirm.errorMessage.includes("guardarGasto")) && (
+                    <div className="mt-3 p-3 bg-brand-gold/10 border border-brand-gold/20 rounded-xl text-left text-[11px] leading-relaxed text-txt select-text max-h-[160px] overflow-y-auto">
+                      <strong className="text-brand-gold block font-black mb-1 uppercase tracking-wider text-[10px]">💡 CÓMO SOLUCIONAR:</strong>
+                      Tu versión de <strong className="text-brand-gold">Google Apps Script</strong> está desactualizada y no tiene la acción <code className="bg-bg px-1 py-0.5 rounded text-brand-gold font-mono">guardarGasto</code>.
+                      <ol className="list-decimal list-inside mt-1.5 space-y-1 text-muted">
+                        <li>Abre el editor de Google Apps Script.</li>
+                        <li>Haz clic en <strong className="text-txt">Implementar &gt; Administrar implementaciones</strong>.</li>
+                        <li>Edita la versión activa seleccionando <strong className="text-txt">"Nueva versión"</strong>.</li>
+                        <li>Haz clic en <strong className="text-txt">Implementar</strong> y copia la nueva URL generada.</li>
+                        <li>Pega la URL en la pestaña <strong className="text-txt">Configuración</strong> de esta app y haz clic en "Guardar Cambios".</li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-3 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setCommissionConfirm({ isOpen: false, payout: null, status: 'idle' })}
+                    className="flex-1 bg-d1 border border-white/5 text-muted hover:text-txt py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                  >
+                    Salir
+                  </button>
+                  <button
+                    type="button"
+                    onClick={executePayCommission}
+                    className="flex-1 bg-danger hover:bg-danger/90 text-white py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
