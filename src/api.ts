@@ -53,13 +53,7 @@ const gasFetch = async (action: string, payload: any = {}) => {
 
     if (result.status === "error") {
       let msg = result.message || '';
-      const isUnrecognizedFallback = (msg.includes("Acción no reconocida") || msg.includes("guardarGasto") || msg.includes("guardarAdelanto") || msg.includes("editarAdelanto")) && (action === "guardarGasto" || action === "guardarAdelanto" || action === "editarAdelanto");
-      if (isUnrecognizedFallback) {
-        console.warn(`[API Info] La acción '${action}' no está disponible en este backend. Activando fallback local.`);
-        return { _isFallbackError: true, message: msg };
-      }
-
-      if (msg.includes("Acción no reconocida") || msg.includes("guardarGasto")) {
+      if (msg.includes("Acción no reconocida") || msg.includes("guardarGasto") || msg.includes("guardarAdelanto") || msg.includes("editarAdelanto")) {
         msg += "\n\n💡 SOLUCIÓN: Tu versión de Google Apps Script está desactualizada y no tiene la acción o tabla requerida. Abre el editor de Apps Script, ingresa a 'Implementar' > 'Administrar implementaciones', edita la implementación activa seleccionando obligatoriamente 'Nueva versión', haz clic en 'Implementar', copia la nueva URL generada y pégala en la pestaña de Configuración.";
       }
       throw new Error(msg);
@@ -68,12 +62,7 @@ const gasFetch = async (action: string, payload: any = {}) => {
     console.log(`[API Response] ${action}`, result.data);
     return result.data;
   } catch (error: any) {
-    const isUnrecognized = error.message && (error.message.includes("Acción no reconocida") || error.message.includes("guardarGasto") || error.message.includes("guardarAdelanto") || error.message.includes("editarAdelanto")) && (action === "guardarGasto" || action === "guardarAdelanto" || action === "editarAdelanto");
-    if (!isUnrecognized) {
-      console.error(`Error en API [${action}]:`, error);
-    } else {
-      console.warn(`[API Notice] Error manejado de acción no reconocida en '${action}':`, error.message);
-    }
+    console.error(`Error en API [${action}]:`, error);
     throw error;
   }
 };
@@ -141,51 +130,30 @@ export const api = {
       }));
     }
 
-    let localExpenses: any[] = [];
-    let localAdelantos: any[] = [];
-    if (typeof window !== 'undefined') {
-      try {
-        localExpenses = JSON.parse(localStorage.getItem('LOCAL_EXPENSES') || '[]');
-      } catch (e) {
-        console.error("Error reading LOCAL_EXPENSES:", e);
-      }
-      try {
-        localAdelantos = JSON.parse(localStorage.getItem('LOCAL_ADELANTOS') || '[]');
-      } catch (e) {
-        console.error("Error reading LOCAL_ADELANTOS:", e);
-      }
-    }
-
     if (data.gastos && Array.isArray(data.gastos)) {
-      data.gastos = [
-        ...data.gastos.map((g: any) => ({
-          ...g,
-          fecha: parseFechaBogota(g.fecha),
-          monto: Number(g.monto || 0)
-        })),
-        ...localExpenses
-      ];
+      data.gastos = data.gastos.map((g: any) => ({
+        ...g,
+        fecha: parseFechaBogota(g.fecha),
+        monto: Number(g.monto || 0)
+      }));
     } else {
-      data.gastos = localExpenses;
+      data.gastos = [];
     }
     
     if (data.adelantos && Array.isArray(data.adelantos)) {
-      data.adelantos = [
-        ...data.adelantos.map((a: any) => ({
-          ...a,
-          id: String(a.id || ''),
-          fecha: parseFechaBogota(a.fecha),
-          usuario: String(a.usuario || '').trim(),
-          nombre: String(a.nombre || '').trim(),
-          monto: Number(a.monto || 0),
-          tipo: String(a.tipo || 'dia').toLowerCase().trim() as any,
-          motivo: String(a.motivo || '').trim(),
-          estado: String(a.estado || 'pendiente').toLowerCase().trim() as any
-        })),
-        ...localAdelantos
-      ];
+      data.adelantos = data.adelantos.map((a: any) => ({
+        ...a,
+        id: String(a.id || ''),
+        fecha: parseFechaBogota(a.fecha),
+        usuario: String(a.usuario || '').trim(),
+        nombre: String(a.nombre || '').trim(),
+        monto: Number(a.monto || 0),
+        tipo: String(a.tipo || 'dia').toLowerCase().trim() as any,
+        motivo: String(a.motivo || '').trim(),
+        estado: String(a.estado || 'pendiente').toLowerCase().trim() as any
+      }));
     } else {
-      data.adelantos = localAdelantos;
+      data.adelantos = [];
     }
     
     return data;
@@ -245,150 +213,15 @@ export const api = {
   },
   
   saveExpense: async (expense: any) => {
-    try {
-      const res = await gasFetch('guardarGasto', { expense });
-      if (res && res._isFallbackError) {
-        console.warn("La acción 'guardarGasto' retornó error de fallback. Guardando localmente en localStorage...");
-        if (typeof window !== 'undefined') {
-          let localExpenses = [];
-          try {
-            localExpenses = JSON.parse(localStorage.getItem('LOCAL_EXPENSES') || '[]');
-          } catch (e) {}
-          localExpenses.push({
-            ...expense,
-            id: `local_g_${Date.now()}`,
-            fecha: expense.fecha || new Date().toISOString().split('T')[0],
-            monto: Number(expense.monto || 0),
-            categoria: expense.categoria || 'Varios',
-            descripcion: expense.descripcion || '',
-            usuario: expense.usuario || 'Socio'
-          });
-          localStorage.setItem('LOCAL_EXPENSES', JSON.stringify(localExpenses));
-        }
-        return { status: "success", local: true };
-      }
-      return res;
-    } catch (err: any) {
-      if (err.message && (err.message.includes("Acción no reconocida") || err.message.includes("guardarGasto"))) {
-        console.warn("La acción 'guardarGasto' falló. Guardando localmente en localStorage...");
-        if (typeof window !== 'undefined') {
-          let localExpenses = [];
-          try {
-            localExpenses = JSON.parse(localStorage.getItem('LOCAL_EXPENSES') || '[]');
-          } catch (e) {}
-          localExpenses.push({
-            ...expense,
-            id: `local_g_${Date.now()}`,
-            fecha: expense.fecha || new Date().toISOString().split('T')[0],
-            monto: Number(expense.monto || 0),
-            categoria: expense.categoria || 'Varios',
-            descripcion: expense.descripcion || '',
-            usuario: expense.usuario || 'Socio'
-          });
-          localStorage.setItem('LOCAL_EXPENSES', JSON.stringify(localExpenses));
-        }
-        return { status: "success", local: true };
-      }
-      throw err;
-    }
+    return gasFetch('guardarGasto', { expense });
   },
   
   saveAdelanto: async (adelanto: any) => {
-    try {
-      const res = await gasFetch('guardarAdelanto', { adelanto });
-      if (res && res._isFallbackError) {
-        console.warn("La acción 'guardarAdelanto' retornó error de fallback. Guardando localmente en localStorage...");
-        if (typeof window !== 'undefined') {
-          let localAdelantos = [];
-          try {
-            localAdelantos = JSON.parse(localStorage.getItem('LOCAL_ADELANTOS') || '[]');
-          } catch (e) {}
-          localAdelantos.push({
-            ...adelanto,
-            id: adelanto.id || `local_ad_${Date.now()}`,
-            fecha: adelanto.fecha || new Date().toISOString().split('T')[0],
-            usuario: String(adelanto.usuario || '').trim(),
-            nombre: String(adelanto.nombre || '').trim(),
-            monto: Number(adelanto.monto || 0),
-            tipo: String(adelanto.tipo || 'dia').toLowerCase().trim() as any,
-            motivo: String(adelanto.motivo || '').trim(),
-            estado: String(adelanto.estado || 'pendiente').toLowerCase().trim() as any
-          });
-          localStorage.setItem('LOCAL_ADELANTOS', JSON.stringify(localAdelantos));
-        }
-        return { status: "success", local: true };
-      }
-      return res;
-    } catch (err: any) {
-      if (err.message && (err.message.includes("Acción no reconocida") || err.message.includes("guardarAdelanto"))) {
-        console.warn("La acción 'guardarAdelanto' falló. Guardando localmente.");
-        if (typeof window !== 'undefined') {
-          let localAdelantos = [];
-          try {
-            localAdelantos = JSON.parse(localStorage.getItem('LOCAL_ADELANTOS') || '[]');
-          } catch (e) {}
-          localAdelantos.push({
-            ...adelanto,
-            id: adelanto.id || `local_ad_${Date.now()}`,
-            fecha: adelanto.fecha || new Date().toISOString().split('T')[0],
-            usuario: String(adelanto.usuario || '').trim(),
-            nombre: String(adelanto.nombre || '').trim(),
-            monto: Number(adelanto.monto || 0),
-            tipo: String(adelanto.tipo || 'dia').toLowerCase().trim() as any,
-            motivo: String(adelanto.motivo || '').trim(),
-            estado: String(adelanto.estado || 'pendiente').toLowerCase().trim() as any
-          });
-          localStorage.setItem('LOCAL_ADELANTOS', JSON.stringify(localAdelantos));
-        }
-        return { status: "success", local: true };
-      }
-      throw err;
-    }
+    return gasFetch('guardarAdelanto', { adelanto });
   },
   
   editAdelanto: async (id: string, adelanto: any) => {
-    try {
-      const res = await gasFetch('editarAdelanto', { id, adelanto });
-      if (res && res._isFallbackError) {
-        console.warn("La acción 'editarAdelanto' retornó error de fallback. Guardando localmente...");
-        if (typeof window !== 'undefined') {
-          let localAdelantos = [];
-          try {
-            localAdelantos = JSON.parse(localStorage.getItem('LOCAL_ADELANTOS') || '[]');
-          } catch (e) {}
-          
-          localAdelantos = localAdelantos.map((item: any) => {
-            if (String(item.id) === String(id)) {
-              return { ...item, ...adelanto };
-            }
-            return item;
-          });
-          localStorage.setItem('LOCAL_ADELANTOS', JSON.stringify(localAdelantos));
-        }
-        return { status: "success", local: true };
-      }
-      return res;
-    } catch (err: any) {
-      if (err.message && (err.message.includes("Acción no reconocida") || err.message.includes("editarAdelanto") || err.message.includes("guardarAdelanto"))) {
-        console.warn("La acción 'editarAdelanto' falló. Editando localmente...");
-        if (typeof window !== 'undefined') {
-          let localAdelantos = [];
-          try {
-            localAdelantos = JSON.parse(localStorage.getItem('LOCAL_ADELANTOS') || '[]');
-          } catch (e) {}
-          
-          localAdelantos = localAdelantos.map((item: any) => {
-            if (String(item.id) === String(id)) {
-              return { ...item, ...adelanto };
-            }
-            return item;
-          });
-          localStorage.setItem('LOCAL_ADELANTOS', JSON.stringify(localAdelantos));
-        }
-        return { status: "success", local: true };
-      }
-      throw err;
-    }
+    return gasFetch('editarAdelanto', { id, adelanto });
   },
   
   updateConfig: async (config: any) => {
