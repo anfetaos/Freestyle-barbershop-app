@@ -35,6 +35,40 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
     setConfigs(configs.map(c => c.key === key ? { ...c, value: val } : c));
   };
 
+  const [testState, setTestState] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
+
+  const handleTestConnection = async () => {
+    const trimmedUrl = customGasUrl.trim();
+    if (!trimmedUrl) {
+      setTestState('error');
+      setTestMessage('Por favor ingresa una URL válida.');
+      return;
+    }
+    
+    setTestState('testing');
+    setTestMessage('');
+    try {
+      setGasUrl(trimmedUrl);
+      const res = await api.ping(trimmedUrl);
+      setTestState('success');
+      setTestMessage(`¡Conexión Exitosa con Google Sheet! Versión detectada: ${res.version || '2.0'}. Esta versión ya soporta plenamente el registro de Gastos, Adelantos y Comisiones de Barberos.`);
+      onRefresh();
+    } catch (err: any) {
+      console.error("Test connection error:", err);
+      const errMsg = err.message || String(err);
+      setTestState('error');
+      
+      if (errMsg.includes("Acción no reconocida") || errMsg.includes("ping")) {
+        setTestMessage("⚠️ VERSIÓN OBSOLETA EN GOOGLE DOCS: Tu Google Sheet respondió correctamente, pero tiene grabada una versión vieja del código. Recuerda que al actualizar el código en Google Apps Script, es OBLIGATORIO ir a 'Implementar' > 'Administrar implementaciones', editar la Web App activa y seleccionar 'Nueva versión' en el selector de versión antes de presionar 'Implementar'. De lo contrario Google seguirá ejecutando tu código antiguo.");
+      } else if (errMsg.includes("JSON") || errMsg.includes("preflight") || errMsg.includes("CORS") || errMsg.includes("no es un JSON válido")) {
+        setTestMessage("❌ ENLACE INCORRECTO: La respuesta de Google no es del tipo esperado. Esto suele ocurrir cuando pegas el enlace normal del navegador del Google Sheet (con /edit) en vez del enlace de Aplicación Web (Web App URL que termina en /exec) generado tras 'Implementar' en el editor de Apps Script.");
+      } else {
+        setTestMessage(`❌ ERROR DE ACCESO: ${errMsg}. Asegúrate de haber publicado la Web App con acceso configurado para 'Cualquier persona' (Anyone), de lo contrario la aplicación web pública del salón no tendrá permisos para registrar los datos.`);
+      }
+    }
+  };
+
   const handleSave = async () => {
     setLoading(true);
     try {
@@ -153,13 +187,39 @@ export default function Settings({ data, onRefresh }: { data: AppData, onRefresh
         <div className="space-y-4">
           <div>
             <label className="block text-[10px] uppercase font-bold text-muted mb-2 tracking-widest">URL de Web App (Google Apps Script)</label>
-            <input 
-              type="text" 
-              value={customGasUrl}
-              onChange={(e) => setCustomGasUrl(e.target.value)}
-              placeholder="https://script.google.com/macros/s/.../exec"
-              className="w-full bg-bg border border-white/10 rounded-lg px-4 py-2.5 text-xs text-txt outline-none focus:border-brand-blue font-mono text-brand-gold"
-            />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input 
+                type="text" 
+                value={customGasUrl}
+                onChange={(e) => {
+                  setCustomGasUrl(e.target.value);
+                  setTestState('idle');
+                }}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="flex-1 bg-bg border border-white/10 rounded-lg px-4 py-2.5 text-[11px] text-txt outline-none focus:border-brand-blue font-mono text-brand-gold truncate"
+              />
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testState === 'testing'}
+                className="bg-brand-gold text-bg px-5 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider hover:opacity-90 active:scale-95 transition-all shrink-0 flex items-center justify-center gap-1.5"
+              >
+                {testState === 'testing' ? <Loader2 size={14} className="animate-spin" /> : null}
+                {testState === 'testing' ? 'PROBANDO...' : 'PROBAR CONEXIÓN'}
+              </button>
+            </div>
+
+            {/* Connection Test Result Messages */}
+            {testState === 'success' && (
+              <div className="mt-3 p-4 bg-success/10 border border-success/20 rounded-xl text-xs text-emerald-400 animate-fade-in leading-relaxed">
+                ✔️ {testMessage}
+              </div>
+            )}
+            {testState === 'error' && (
+              <div className="mt-3 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400 animate-fade-in leading-relaxed">
+                {testMessage}
+              </div>
+            )}
           </div>
           <div className="p-4 bg-bg/50 border border-white/5 rounded-xl text-xs leading-relaxed text-muted space-y-2">
             <p>

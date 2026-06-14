@@ -1,3 +1,4 @@
+// REEMPLAZA este ID con el ID de tu propia Google Sheet si el script no está vinculado directamente (no es Container-Bound):
 var SPREADSHEET_ID = "1oFtB5U0sGwF5z8SpMMT4eni0wSLUwZoHIJCZ-EqrjOc";
 
 function doGet(e) {
@@ -12,6 +13,9 @@ function doPost(e) {
     
     var result;
     switch(action) {
+      case 'ping':
+        result = { version: "2.0", isGastoSupported: true, detail: "Conexión exitosa con Google Sheets API v2.0" };
+        break;
       case 'login':
         result = login(payload.usuario, payload.password);
         break;

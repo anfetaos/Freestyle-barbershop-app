@@ -53,8 +53,12 @@ const gasFetch = async (action: string, payload: any = {}) => {
 
     if (result.status === "error") {
       let msg = result.message || '';
-      if (msg.includes("Acción no reconocida") || msg.includes("guardarGasto") || msg.includes("guardarAdelanto") || msg.includes("editarAdelanto")) {
-        msg += "\n\n💡 SOLUCIÓN: Tu versión de Google Apps Script está desactualizada y no tiene la acción o tabla requerida. Abre el editor de Apps Script, ingresa a 'Implementar' > 'Administrar implementaciones', edita la implementación activa seleccionando obligatoriamente 'Nueva versión', haz clic en 'Implementar', copia la nueva URL generada y pégala en la pestaña de Configuración.";
+      const isUnrecognized = msg.includes("Acción no reconocida") || msg.includes("guardarGasto") || msg.includes("guardarAdelanto") || msg.includes("editarAdelanto");
+      if (isUnrecognized) {
+        msg += `\n\n🔗 URL de Web App activa en la app:\n${url}\n\n💡 SOLUCIÓN: Tu versión de Google Apps Script está desactualizada y no tiene la acción o tabla requerida. Abre el editor de Apps Script, ingresa a 'Implementar' > 'Administrar implementaciones', edita la implementación activa seleccionando obligatoriamente 'Nueva versión', haz clic en 'Implementar', copia la nueva URL generada y pégala en la pestaña de Configuración.`;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('apps-script-action-error', { detail: { message: msg } }));
+        }
       }
       throw new Error(msg);
     }
@@ -226,5 +230,35 @@ export const api = {
   
   updateConfig: async (config: any) => {
     return gasFetch('actualizarConfig', { config });
+  },
+  
+  ping: async (urlToCheck?: string): Promise<{ version: string; isGastoSupported: boolean; detail?: string }> => {
+    const url = urlToCheck || getGasUrl();
+    const response = await fetch(url, {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8",
+      },
+      body: JSON.stringify({ action: 'ping' }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error de red: ${response.status} ${response.statusText}`);
+    }
+
+    const text = await response.text();
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (e) {
+      throw new Error("La respuesta del servidor no es un JSON válido o la Web App no está publicada correctamente. Asegúrate de haber guardado el código, publicado una nueva versión y otorgado permisos para 'Cualquier persona' (Anyone).");
+    }
+
+    if (result.status === "error") {
+      throw new Error(result.message || "Error devuelto por Apps Script");
+    }
+
+    return result.data || result;
   }
 };

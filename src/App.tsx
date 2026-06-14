@@ -12,6 +12,7 @@ import Users from './components/Users';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import BookingPage from './components/BookingPage';
+import AppsScriptUpdateModal from './components/AppsScriptUpdateModal';
 import { AppData, User } from './types';
 
 export default function App() {
@@ -21,6 +22,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [checkoutCart, setCheckoutCart] = useState<any[]>([]);
   const [checkoutAppointmentId, setCheckoutAppointmentId] = useState<string | null>(null);
+  const [isAppsScriptModalOpen, setIsAppsScriptModalOpen] = useState(false);
+  const [appsScriptErrorMsg, setAppsScriptErrorMsg] = useState('');
 
   // Check for public booking route
   const isBookingPage = 
@@ -50,6 +53,17 @@ export default function App() {
       loadData();
     }
   }, [user]);
+
+  useEffect(() => {
+    const handleAppsScriptError = (e: any) => {
+      setAppsScriptErrorMsg(e.detail?.message || '');
+      setIsAppsScriptModalOpen(true);
+    };
+    window.addEventListener('apps-script-action-error', handleAppsScriptError);
+    return () => {
+      window.removeEventListener('apps-script-action-error', handleAppsScriptError);
+    };
+  }, []);
 
   if (authLoading) return null;
 
@@ -104,16 +118,23 @@ export default function App() {
   };
 
   return (
-    <Layout 
-      activeTab={activeTab} 
-      setActiveTab={setActiveTab} 
-      data={data} 
-      loading={loading}
-      error={error}
-      onLogout={logout}
-      onRefresh={loadData}
-    >
-      {renderContent()}
-    </Layout>
+    <>
+      <Layout 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        data={data} 
+        loading={loading}
+        error={error}
+        onLogout={logout}
+        onRefresh={loadData}
+      >
+        {renderContent()}
+      </Layout>
+      <AppsScriptUpdateModal 
+        isOpen={isAppsScriptModalOpen} 
+        onClose={() => setIsAppsScriptModalOpen(false)} 
+        errorMessage={appsScriptErrorMsg} 
+      />
+    </>
   );
 }
