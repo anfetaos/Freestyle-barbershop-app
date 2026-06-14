@@ -472,6 +472,37 @@ export default function Reports({
 
     try {
       const todayStr = getLocalDateString();
+      let targetFecha = todayStr;
+
+      if (filter === 'semana') {
+        const parts = selectedWeek.split('_');
+        const start = parts[0];
+        const end = parts[1];
+        if (start && end) {
+          // If today's date falls within this week, use today, otherwise use the Sunday (end date) of that week
+          if (todayStr >= start && todayStr <= end) {
+            targetFecha = todayStr;
+          } else {
+            targetFecha = end;
+          }
+        }
+      } else if (filter === 'mes') {
+        // If today's date is within the selected month, use today, otherwise use the 28th of that selected month
+        if (todayStr.startsWith(selectedMonth)) {
+          targetFecha = todayStr;
+        } else {
+          targetFecha = `${selectedMonth}-28`;
+        }
+      } else if (filter === 'rango') {
+        if (startDate && endDate) {
+          if (todayStr >= startDate && todayStr <= endDate) {
+            targetFecha = todayStr;
+          } else {
+            targetFecha = endDate;
+          }
+        }
+      }
+
       const rangeLabel = filter === 'rango' 
         ? `${startDate} al ${endDate}` 
         : filter === 'hoy' 
@@ -489,7 +520,7 @@ export default function Reports({
               : 'Histórico';
 
       const expense = {
-        fecha: todayStr,
+        fecha: targetFecha,
         categoria: 'Comisión',
         descripcion: `Pago Comisión - ${payout.name} (Periodo: ${rangeLabel})`,
         monto: payout.pending,

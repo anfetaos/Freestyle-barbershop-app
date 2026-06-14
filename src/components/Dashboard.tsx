@@ -267,7 +267,10 @@ export default function Dashboard({
   const totalComision = userSales.reduce((acc, v) => {
     if (v.tipo === 'servicio' || v.comisionable) {
       if (isOwner) {
-        const barbero = data.usuarios.find(u => u.usuario === v.usuario);
+        const barbero = data.usuarios.find(u => 
+          u.usuario?.toLowerCase().trim() === v.usuario?.toLowerCase().trim() ||
+          u.nombre?.toLowerCase().trim() === v.usuario?.toLowerCase().trim()
+        );
         if (barbero && barbero.porcentaje > 0) {
           return acc + (v.valor * v.cantidad * (barbero.porcentaje / 100));
         }
