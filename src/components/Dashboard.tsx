@@ -46,6 +46,88 @@ export default function Dashboard({
     return getLocalDateString();
   });
 
+  const getRecentWeeks = () => {
+    const list = [];
+    const bogotaDateStr = getBogotaDateString();
+    const parts = bogotaDateStr.split('-');
+    const bYear = parseInt(parts[0], 10);
+    const bMonth = parseInt(parts[1], 10) - 1;
+    const bDay = parseInt(parts[2], 10);
+    
+    // Base UTC at 12:00
+    const todayUTC = new Date(Date.UTC(bYear, bMonth, bDay, 12, 0, 0));
+    const dayOfWeek = todayUTC.getUTCDay(); // 0 = Sun, 1 = Mon ...
+    
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const currentMonday = new Date(todayUTC.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
+    
+    const formatLabelDate = (d: Date): string => {
+      const monthsEs = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      return `${d.getUTCDate()} ${monthsEs[d.getUTCMonth()]}`;
+    };
+
+    const formatISO = (d: Date): string => {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    
+    for (let i = 0; i < 8; i++) {
+      const mon = new Date(currentMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+      const sun = new Date(mon.getTime() + 6 * 24 * 60 * 60 * 1000);
+      
+      const startISO = formatISO(mon);
+      const endISO = formatISO(sun);
+      
+      let label = `Sema: ${formatLabelDate(mon)} al ${formatLabelDate(sun)}`;
+      if (i === 0) {
+        label = `Esta Semana (${formatLabelDate(mon)} al ${formatLabelDate(sun)})`;
+      } else if (i === 1) {
+        label = `Semana Pasada (${formatLabelDate(mon)} al ${formatLabelDate(sun)})`;
+      }
+      
+      list.push({
+        value: `${startISO}_${endISO}`,
+        label,
+        start: startISO,
+        end: endISO
+      });
+    }
+    return list;
+  };
+
+  const getRecentMonths = () => {
+    const monthsEs = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    const list = [];
+    const d = new Date();
+    for (let i = 0; i < 12; i++) {
+      const temp = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const year = temp.getFullYear();
+      const monthIdx = temp.getMonth();
+      const monthNum = String(monthIdx + 1).padStart(2, '0');
+      const label = `${monthsEs[monthIdx]} ${year}`;
+      list.push({
+        value: `${year}-${monthNum}`,
+        label
+      });
+    }
+    return list;
+  };
+
+  const [selectedMonth, setSelectedMonth] = React.useState<string>(() => {
+    const todayStr = getBogotaDateString();
+    return todayStr.substring(0, 7);
+  });
+
+  const [selectedWeek, setSelectedWeek] = React.useState<string>(() => {
+    const weeks = getRecentWeeks();
+    return weeks[0]?.value || '';
+  });
+
   const [processingAdvanceId, setProcessingAdvanceId] = React.useState<string | null>(null);
   
   // Barber states
@@ -146,19 +228,23 @@ export default function Dashboard({
       return itemDate >= startDate && itemDate <= endDate;
     }
 
-    const date = new Date(itemDate + 'T00:00:00');
-    const todayMidnight = new Date(getBogotaDateString() + 'T00:00:00');
-
     if (period === 'week') {
-      const { start, end } = getWeeklyDateRange();
-      return itemDate >= start && itemDate <= end;
+      const parts = selectedWeek.split('_');
+      const start = parts[0];
+      const end = parts[1];
+      if (start && end) {
+        return itemDate >= start && itemDate <= end;
+      }
+      const { start: sStart, end: sEnd } = getWeeklyDateRange();
+      return itemDate >= sStart && itemDate <= sEnd;
     }
     if (period === 'month') {
-      const monthAgo = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth() - 1, todayMidnight.getDate());
-      return date >= monthAgo;
+      return itemDate && itemDate.startsWith(selectedMonth);
     }
     if (period === 'year') {
+      const todayMidnight = new Date(getBogotaDateString() + 'T00:00:00');
       const yearAgo = new Date(todayMidnight.getFullYear() - 1, todayMidnight.getMonth(), todayMidnight.getDate());
+      const date = new Date(itemDate + 'T00:00:00');
       return date >= yearAgo;
     }
     return true;
@@ -312,7 +398,17 @@ export default function Dashboard({
           <p className="text-xs text-muted font-medium">
             {period === 'custom' 
               ? `Personalizado: ${startDate} al ${endDate}` 
-              : `Visualizando datos por ${period === 'day' ? 'día' : period === 'week' ? 'semana' : period === 'month' ? 'mes' : period === 'year' ? 'año' : ''}`}
+              : period === 'week'
+                ? (() => {
+                    const currentWeekLabel = getRecentWeeks().find(w => w.value === selectedWeek)?.label;
+                    return currentWeekLabel || 'Semana';
+                  })()
+                : period === 'month'
+                  ? (() => {
+                      const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                      return currentMonthLabel || 'Mes';
+                    })()
+                  : `Visualizando datos por ${period === 'day' ? 'hoy' : period === 'year' ? 'este año' : ''}`}
           </p>
         </div>
         <div className="flex bg-d1 p-1 rounded-lg border border-d3 scale-90 sm:scale-100 origin-left">
@@ -325,11 +421,68 @@ export default function Dashboard({
                 period === p ? "bg-brand-blue text-bg shadow-lg" : "text-muted hover:text-txt"
               )}
             >
-              {p === 'day' ? 'Hoy' : p === 'week' ? 'Semana' : p === 'month' ? 'Mes' : p === 'year' ? 'Año' : 'Rango'}
+              {p === 'day' ? 'Hoy' : p === 'week' ? 'Semanas' : p === 'month' ? 'Mes Cursado' : p === 'year' ? 'Año' : 'Calendario'}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Semana Selector */}
+      {period === 'week' && (
+        <div className="bg-d1 border border-brand-blue/10 p-4 rounded-xl flex flex-wrap items-center gap-4 shadow-inner animate-fade-in">
+          <div className="flex flex-col gap-1 min-w-[280px]">
+            <span className="text-[9px] font-black uppercase tracking-widest text-brand-blue flex items-center gap-1">
+              <CalendarIcon size={10} /> Seleccionar Rango de Semana:
+            </span>
+            <select
+              value={selectedWeek}
+              onChange={(e) => setSelectedWeek(e.target.value)}
+              className="bg-bg border border-d3 text-txt text-xs font-bold rounded-lg px-4 py-2.5 outline-none focus:border-brand-blue cursor-pointer"
+            >
+              {getRecentWeeks().map(w => (
+                <option key={w.value} value={w.value} className="bg-d1 text-txt font-bold">
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col justify-end h-full pt-2 md:pt-0">
+            <span className="text-[10px] font-bold text-brand-gold bg-brand-gold/10 border border-brand-gold/20 px-3 py-2 rounded-lg">
+              Rango Activo: {userSales.length} transacciones cobradas ({(() => {
+                const [s, e] = selectedWeek.split('_');
+                return `${s} al ${e}`;
+              })()})
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Mes Selector */}
+      {period === 'month' && (
+        <div className="bg-d1 border border-brand-gold/10 p-4 rounded-xl flex flex-wrap items-center gap-4 shadow-inner animate-fade-in">
+          <div className="flex flex-col gap-1 min-w-[280px]">
+            <span className="text-[9px] font-black uppercase tracking-widest text-brand-gold flex items-center gap-1">
+              <CalendarIcon size={10} /> Seleccionar Mes Específico:
+            </span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-bg border border-d3 text-txt text-xs font-bold rounded-lg px-4 py-2.5 outline-none focus:border-brand-gold cursor-pointer"
+            >
+              {getRecentMonths().map(m => (
+                <option key={m.value} value={m.value} className="bg-d1 text-txt font-bold">
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col justify-end h-full pt-2 md:pt-0">
+            <span className="text-[10px] font-bold text-brand-blue bg-brand-blue/10 border border-brand-blue/20 px-3 py-2 rounded-lg">
+              Rango Activo: {userSales.length} transacciones cobradas
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Selector de Rango de Fechas */}
       {period === 'custom' && (
@@ -385,7 +538,21 @@ export default function Dashboard({
           <div className="px-6 py-4 border-b border-d3 flex justify-between items-center bg-d2/50">
             <h3 className="text-sm font-bold uppercase tracking-widest text-txt">{isOwner ? 'Rendimiento Barberos' : 'Mis Ventas Diarias'}</h3>
             <span className="text-[10px] text-brand-blue font-bold uppercase tracking-wider">
-              {period === 'day' ? 'Hoy' : period === 'week' ? `Semana (${getWeeklyDateRange().start} al ${getWeeklyDateRange().end})` : period === 'month' ? '30 días' : 'Este año'}
+              {period === 'day' 
+                ? 'Hoy' 
+                : period === 'week' 
+                  ? (() => {
+                      const currentWeekLabel = getRecentWeeks().find(w => w.value === selectedWeek)?.label;
+                      return currentWeekLabel || 'Semana';
+                    })()
+                  : period === 'month' 
+                    ? (() => {
+                        const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                        return currentMonthLabel || 'Mes';
+                      })()
+                    : period === 'custom'
+                      ? `${startDate} al ${endDate}`
+                      : 'Este año'}
             </span>
           </div>
           <div className="p-4 sm:p-6 h-[250px] sm:h-[300px] w-full">

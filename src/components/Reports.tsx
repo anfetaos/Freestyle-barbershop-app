@@ -19,6 +19,7 @@ import { AppData, User } from '../types';
 import { formatCurrency, cn, getBogotaDateString, getWeeklyDateRange } from '../utils';
 import { api } from '../api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import SalesDetailModal from './SalesDetailModal';
 
 export default function Reports({ 
   data, 
@@ -30,6 +31,91 @@ export default function Reports({
   onRefresh?: () => void; 
 }) {
   const [filter, setFilter] = useState('semana'); // Default to 'semana'
+  
+  const getRecentWeeks = () => {
+    const list = [];
+    const bogotaDateStr = getBogotaDateString();
+    const parts = bogotaDateStr.split('-');
+    const bYear = parseInt(parts[0], 10);
+    const bMonth = parseInt(parts[1], 10) - 1;
+    const bDay = parseInt(parts[2], 10);
+    
+    // Base UTC at 12:00
+    const todayUTC = new Date(Date.UTC(bYear, bMonth, bDay, 12, 0, 0));
+    const dayOfWeek = todayUTC.getUTCDay(); // 0 = Sun, 1 = Mon ...
+    
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const currentMonday = new Date(todayUTC.getTime() - mondayOffset * 24 * 60 * 60 * 1000);
+    
+    const formatLabelDate = (d: Date): string => {
+      const monthsEs = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      return `${d.getUTCDate()} ${monthsEs[d.getUTCMonth()]}`;
+    };
+
+    const formatISO = (d: Date): string => {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    
+    for (let i = 0; i < 8; i++) {
+      const mon = new Date(currentMonday.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+      const sun = new Date(mon.getTime() + 6 * 24 * 60 * 60 * 1000);
+      
+      const startISO = formatISO(mon);
+      const endISO = formatISO(sun);
+      
+      let label = `Sema: ${formatLabelDate(mon)} al ${formatLabelDate(sun)}`;
+      if (i === 0) {
+        label = `Esta Semana (${formatLabelDate(mon)} al ${formatLabelDate(sun)})`;
+      } else if (i === 1) {
+        label = `Semana Pasada (${formatLabelDate(mon)} al ${formatLabelDate(sun)})`;
+      }
+      
+      list.push({
+        value: `${startISO}_${endISO}`,
+        label,
+        start: startISO,
+        end: endISO
+      });
+    }
+    return list;
+  };
+
+  const getRecentMonths = () => {
+    const monthsEs = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+    const list = [];
+    const d = new Date();
+    for (let i = 0; i < 12; i++) {
+      const temp = new Date(d.getFullYear(), d.getMonth() - i, 1);
+      const year = temp.getFullYear();
+      const monthIdx = temp.getMonth();
+      const monthNum = String(monthIdx + 1).padStart(2, '0');
+      const label = `${monthsEs[monthIdx]} ${year}`;
+      list.push({
+        value: `${year}-${monthNum}`,
+        label
+      });
+    }
+    return list;
+  };
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const todayStr = getBogotaDateString();
+    return todayStr.substring(0, 7);
+  });
+
+  const [selectedWeek, setSelectedWeek] = useState<string>(() => {
+    const weeks = getRecentWeeks();
+    return weeks[0]?.value || '';
+  });
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [detailModalTab, setDetailModalTab] = useState<'todos' | 'servicios' | 'productos'>('todos');
   const [payingUser, setPayingUser] = useState<string | null>(null);
   const [commissionConfirm, setCommissionConfirm] = useState<{
     isOpen: boolean;
@@ -85,15 +171,18 @@ export default function Reports({
     }
     
     if (filter === 'semana') {
-      const { start, end } = getWeeklyDateRange();
-      return sales.filter(v => v.fecha >= start && v.fecha <= end);
+      const parts = selectedWeek.split('_');
+      const start = parts[0];
+      const end = parts[1];
+      if (start && end) {
+        return sales.filter(v => v.fecha >= start && v.fecha <= end);
+      }
+      const { start: sStart, end: sEnd } = getWeeklyDateRange();
+      return sales.filter(v => v.fecha >= sStart && v.fecha <= sEnd);
     }
     
     if (filter === 'mes') {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 1);
-      const limit = getLocalDateString(d);
-      return sales.filter(v => v.fecha >= limit);
+      return sales.filter(v => v.fecha && v.fecha.startsWith(selectedMonth));
     }
     
     if (filter === 'rango') {
@@ -132,15 +221,18 @@ export default function Reports({
     }
     
     if (filter === 'semana') {
-      const { start, end } = getWeeklyDateRange();
-      return expenses.filter(g => g.fecha >= start && g.fecha <= end);
+      const parts = selectedWeek.split('_');
+      const start = parts[0];
+      const end = parts[1];
+      if (start && end) {
+        return expenses.filter(g => g.fecha >= start && g.fecha <= end);
+      }
+      const { start: sStart, end: sEnd } = getWeeklyDateRange();
+      return expenses.filter(g => g.fecha >= sStart && g.fecha <= sEnd);
     }
     
     if (filter === 'mes') {
-      const d = new Date();
-      d.setMonth(d.getMonth() - 1);
-      const limit = getLocalDateString(d);
-      return expenses.filter(g => g.fecha >= limit);
+      return expenses.filter(g => g.fecha && g.fecha.startsWith(selectedMonth));
     }
     
     if (filter === 'rango') {
@@ -216,13 +308,17 @@ export default function Reports({
       if (filter === 'hoy') {
         matchesPeriod = a.fecha === todayStr;
       } else if (filter === 'semana') {
-        const { start, end } = getWeeklyDateRange();
-        matchesPeriod = a.fecha >= start && a.fecha <= end;
+        const parts = selectedWeek.split('_');
+        const start = parts[0];
+        const end = parts[1];
+        if (start && end) {
+          matchesPeriod = a.fecha >= start && a.fecha <= end;
+        } else {
+          const { start: sStart, end: sEnd } = getWeeklyDateRange();
+          matchesPeriod = a.fecha >= sStart && a.fecha <= sEnd;
+        }
       } else if (filter === 'mes') {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        const limit = getLocalDateString(d);
-        matchesPeriod = a.fecha >= limit;
+        matchesPeriod = a.fecha && a.fecha.startsWith(selectedMonth);
       } else if (filter === 'rango') {
         matchesPeriod = (!startDate || a.fecha >= startDate) && (!endDate || a.fecha <= endDate);
       } else {
@@ -381,9 +477,15 @@ export default function Reports({
         : filter === 'hoy' 
           ? todayStr 
           : filter === 'semana' 
-            ? `Semana (${getWeeklyDateRange().start} al ${getWeeklyDateRange().end})` 
+            ? (() => {
+                const currentWeekLabel = getRecentWeeks().find(w => w.value === selectedWeek)?.label;
+                return currentWeekLabel || 'Semana';
+              })()
             : filter === 'mes' 
-              ? 'Último mes' 
+              ? (() => {
+                  const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                  return currentMonthLabel || 'Mes';
+                })()
               : 'Histórico';
 
       const expense = {
@@ -439,11 +541,68 @@ export default function Reports({
                 filter === f ? "bg-brand-blue text-bg shadow-lg font-black" : "text-muted hover:text-txt"
               )}
             >
-              {f === 'rango' ? 'Calendario' : f === 'historico' ? 'Histórico' : f}
+              {f === 'rango' ? 'Calendario' : f === 'historico' ? 'Histórico' : f === 'semana' ? 'Semanas' : f === 'mes' ? 'Mes Cursado' : f}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Semana Selector */}
+      {filter === 'semana' && (
+        <div className="bg-d1 border border-brand-blue/10 p-5 rounded-2xl flex flex-wrap items-center gap-6 shadow-inner animate-fade-in">
+          <div className="flex flex-col gap-1.5 min-w-[280px]">
+            <span className="text-[9px] font-black uppercase tracking-widest text-brand-blue flex items-center gap-1">
+              <Calendar size={10} /> Seleccionar Rango de Semana:
+            </span>
+            <select
+              value={selectedWeek}
+              onChange={(e) => setSelectedWeek(e.target.value)}
+              className="bg-bg border border-d3 text-txt text-xs font-bold rounded-lg px-4 py-2.5 outline-none focus:border-brand-blue cursor-pointer"
+            >
+              {getRecentWeeks().map(w => (
+                <option key={w.value} value={w.value} className="bg-d1 text-txt font-bold">
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col justify-end h-full pt-4 md:pt-0">
+            <span className="text-[10px] font-bold text-brand-gold bg-brand-gold/10 border border-brand-gold/20 px-4 py-2.5 rounded-xl">
+              Rango Activo: {filteredSales.length} transacciones cobradas ({(() => {
+                const [s, e] = selectedWeek.split('_');
+                return `${s} al ${e}`;
+              })()})
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Mes Selector */}
+      {filter === 'mes' && (
+        <div className="bg-d1 border border-brand-gold/10 p-5 rounded-2xl flex flex-wrap items-center gap-6 shadow-inner animate-fade-in">
+          <div className="flex flex-col gap-1.5 min-w-[280px]">
+            <span className="text-[9px] font-black uppercase tracking-widest text-brand-gold flex items-center gap-1">
+              <Calendar size={10} /> Seleccionar Mes Específico:
+            </span>
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-bg border border-d3 text-txt text-xs font-bold rounded-lg px-4 py-2.5 outline-none focus:border-brand-gold cursor-pointer"
+            >
+              {getRecentMonths().map(m => (
+                <option key={m.value} value={m.value} className="bg-d1 text-txt font-bold">
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col justify-end h-full pt-4 md:pt-0">
+            <span className="text-[10px] font-bold text-brand-blue bg-brand-blue/10 border border-brand-blue/20 px-4 py-2.5 rounded-xl">
+              Rango Activo: {filteredSales.length} transacciones cobradas
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Rango de Fechas Selector (Visible if custom range selected) */}
       {filter === 'rango' && (
@@ -480,12 +639,24 @@ export default function Reports({
 
       {/* Hero Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div className="bg-d1 border-l-4 border-l-brand-blue border border-d3 rounded-xl p-5 shadow-sm">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-brand-blue/10 text-brand-blue rounded-lg">
-              <TrendingUp size={16} />
+        <div 
+          onClick={() => {
+            setDetailModalTab('todos');
+            setDetailModalOpen(true);
+          }}
+          className="bg-d1 border-l-4 border-l-brand-blue border border-d3 rounded-xl p-5 shadow-sm cursor-pointer hover:border-brand-blue/50 active:scale-[0.98] transition-all relative group"
+          title="Ver desglose detallado de ventas"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-brand-blue/10 text-brand-blue rounded-lg">
+                <TrendingUp size={16} />
+              </div>
+              <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest">Ingresos Brutos</span>
             </div>
-            <span className="text-[10px] font-extrabold text-muted uppercase tracking-widest">Ingresos Brutos</span>
+            <span className="text-[9px] font-black text-brand-blue uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+              Desglose ↗
+            </span>
           </div>
           <p className="text-2xl font-black text-txt font-mono">{formatCurrency(totalSales)}</p>
           <p className="text-[9px] text-muted font-bold mt-1.5 uppercase">Servicios + Productos</p>
@@ -684,9 +855,20 @@ export default function Reports({
                 Calcula comisiones devengadas contra comisiones liquidadas reales por barberos
               </p>
             </div>
-            {(filter === 'rango' || filter === 'semana') && (
+            {(filter === 'rango' || filter === 'semana' || filter === 'mes') && (
               <span className="text-[9px] text-brand-gold font-bold bg-brand-gold/10 px-2.5 py-1.5 rounded-lg border border-brand-gold/20 font-mono">
-                {filter === 'semana' ? `${getWeeklyDateRange().start} a ${getWeeklyDateRange().end}` : `${startDate} / ${endDate}`}
+                {filter === 'semana' 
+                  ? (() => {
+                      const parts = selectedWeek.split('_');
+                      return `${parts[0]} a ${parts[1]}`;
+                    })()
+                  : filter === 'mes'
+                    ? (() => {
+                        const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                        return currentMonthLabel || selectedMonth;
+                      })()
+                    : `${startDate} / ${endDate}`
+                }
               </span>
             )}
           </div>
@@ -909,8 +1091,20 @@ export default function Reports({
 
       {/* Origen de Ingresos/Detalle */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8">
-          <h3 className="text-sm font-black text-txt uppercase tracking-widest mb-6 border-b border-d3/30 pb-3">Origen de Ingresos</h3>
+        <div 
+          onClick={() => {
+            setDetailModalTab('todos');
+            setDetailModalOpen(true);
+          }}
+          className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 cursor-pointer hover:border-brand-gold/30 transition-all group"
+          title="Ver desglose detallado por categoría"
+        >
+          <div className="flex items-center justify-between mb-6 border-b border-d3/30 pb-3">
+            <h3 className="text-sm font-black text-txt uppercase tracking-widest">Origen de Ingresos</h3>
+            <span className="text-[9px] font-black text-brand-gold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+              Ver Gráfico Expandido ↗
+            </span>
+          </div>
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -926,29 +1120,57 @@ export default function Reports({
           </div>
         </div>
 
-        <div className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 space-y-6">
-          <h3 className="text-sm font-black text-txt uppercase tracking-widest border-b border-d3/30 pb-3">Resumen de Ventas</h3>
+        <div 
+          onClick={() => {
+            setDetailModalTab('todos');
+            setDetailModalOpen(true);
+          }}
+          className="bg-d1 border border-d3 rounded-2xl p-6 sm:p-8 space-y-6 cursor-pointer hover:border-brand-gold/30 transition-all group"
+          title="Ver desglose de transacciones"
+        >
+          <div className="flex items-center justify-between border-b border-d3/30 pb-3">
+            <h3 className="text-sm font-black text-txt uppercase tracking-widest">Resumen de Ventas</h3>
+            <span className="text-[9px] font-black text-brand-gold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+              Ver Detalles ↗
+            </span>
+          </div>
           <div className="space-y-4">
-             <div className="flex items-center justify-between p-4 bg-d2 rounded-xl border border-d3 shadow-sm">
+             <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDetailModalTab('servicios');
+                  setDetailModalOpen(true);
+                }}
+                className="flex items-center justify-between p-4 bg-d2 rounded-xl border border-d3 shadow-sm hover:border-brand-blue/40 cursor-pointer active:scale-98 transition-all group/item"
+                title="Haga clic para ver servicios realizados"
+             >
                 <div className="flex items-center gap-4">
-                   <div className="p-2 bg-brand-blue/10 text-brand-blue rounded-lg"><Scissors size={18} /></div>
-                   <p className="text-sm font-black text-txt uppercase tracking-tight">Venta de Servicios</p>
+                   <div className="p-2 bg-brand-blue/10 text-brand-blue rounded-lg group-hover/item:scale-110 transition-transform"><Scissors size={18} /></div>
+                   <p className="text-sm font-black text-txt uppercase tracking-tight group-hover/item:text-brand-blue transition-colors">Venta de Servicios ↗</p>
                 </div>
                 <span className="font-mono font-black text-brand-blue">{formatCurrency(serviceSales)}</span>
              </div>
              
-             <div className="p-4 bg-d2 rounded-xl border border-d3 shadow-sm space-y-3">
+             <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDetailModalTab('productos');
+                  setDetailModalOpen(true);
+                }}
+                className="p-4 bg-d2 rounded-xl border border-d3 shadow-sm space-y-3 hover:border-brand-gold/40 cursor-pointer active:scale-98 transition-all group/item"
+                title="Haga clic para ver productos vendidos"
+             >
                 <div className="flex items-center justify-between">
                    <div className="flex items-center gap-4">
-                      <div className="p-2 bg-brand-gold/10 text-brand-gold rounded-lg"><ShoppingBag size={18} /></div>
-                      <p className="text-sm font-black text-txt uppercase tracking-tight">Venta de Productos</p>
+                      <div className="p-2 bg-brand-gold/10 text-brand-gold rounded-lg group-hover/item:scale-110 transition-transform"><ShoppingBag size={18} /></div>
+                      <p className="text-sm font-black text-txt uppercase tracking-tight group-hover/item:text-brand-gold transition-colors">Venta de Productos ↗</p>
                    </div>
                    <span className="font-mono font-black text-brand-gold">{formatCurrency(productSales)}</span>
                 </div>
                 {isOwner && productSales > 0 && (
                    <div className="pt-2.5 border-t border-d3/30 grid grid-cols-2 gap-3 text-xs font-semibold uppercase tracking-wider">
                       <div className="bg-bg/40 p-2 rounded-lg border border-d3/20">
-                         <span className="text-[8px] text-muted block mb-0.5 animate-pulse">Costo Total</span>
+                         <span className="text-[8px] text-muted block mb-0.5">Costo Total</span>
                          <span className="font-mono font-bold text-txt text-[11px]">{formatCurrency(totalProductCost)}</span>
                       </div>
                       <div className="bg-success/5 p-2 rounded-lg border border-success/15">
@@ -1023,9 +1245,15 @@ export default function Reports({
                         : filter === 'hoy' 
                           ? 'Hoy' 
                           : filter === 'semana' 
-                            ? `Semana (${getWeeklyDateRange().start} / ${getWeeklyDateRange().end})` 
+                            ? (() => {
+                                const currentWeekLabel = getRecentWeeks().find(w => w.value === selectedWeek)?.label;
+                                return currentWeekLabel || 'Semana';
+                              })()
                             : filter === 'mes' 
-                              ? 'Último mes' 
+                              ? (() => {
+                                  const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                                  return currentMonthLabel || 'Mes';
+                                })()
                               : 'Histórico'}
                     </span>
                   </div>
@@ -1137,6 +1365,33 @@ export default function Reports({
           </motion.div>
         </div>
       )}
+
+      {/* Sales Detail Modal for Drill-Down Reports */}
+      <SalesDetailModal 
+        isOpen={detailModalOpen}
+        onClose={() => setDetailModalOpen(false)}
+        sales={filteredSales}
+        products={data.productos || []}
+        services={data.servicios || []}
+        initialTab={detailModalTab}
+        filterLabel={
+          filter === 'rango' 
+            ? `${startDate} al ${endDate}` 
+            : filter === 'hoy' 
+              ? getBogotaDateString() 
+              : filter === 'semana' 
+                ? (() => {
+                    const currentWeekLabel = getRecentWeeks().find(w => w.value === selectedWeek)?.label;
+                    return currentWeekLabel || 'Semana';
+                  })()
+                : filter === 'mes' 
+                  ? (() => {
+                      const currentMonthLabel = getRecentMonths().find(m => m.value === selectedMonth)?.label;
+                      return currentMonthLabel || 'Mes';
+                    })()
+                  : 'Histórico'
+        }
+      />
     </div>
   );
 }
